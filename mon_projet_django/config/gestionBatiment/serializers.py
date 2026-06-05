@@ -3,11 +3,12 @@ from django.contrib.auth.models import User
 from .models import Client, Batiment, Niveau,  TypeBureau, Bureau, Reservation,  Contrat, Location, Paiement
 
 
+
 class ClientSerializer(serializers.ModelSerializer):
     class Meta:
         model = Client
         fields = ['id',   
-                  'user',  
+                  'user', 
                   'telephone', 
                   'addresse', 
                   'date_naissance',
@@ -126,7 +127,7 @@ class PaiementSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Paiement
-        fields = ['id', 'date', 'montant', 'mode', 'location', 'client', 'created_at', 'updated_at', 'is_active']
+        fields = ['id', 'date', 'montant', 'mode', 'location', 'client','contrat', 'statut', 'created_at', 'updated_at', 'is_active']
 
     def get_client(self, obj):
         if obj.client:
@@ -150,6 +151,7 @@ class ReservationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Reservation
         fields = ['id', 'date_debut', 'montant_calcule', 'date_fin', 'bureau', 'client', 'created_at', 'updated_at', 'is_active']
+        
 
     def get_montant_calcule(self, obj):
         if obj.bureau and obj.date_debut and obj.date_fin:

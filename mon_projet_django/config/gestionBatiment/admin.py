@@ -8,9 +8,18 @@ from .models import Client , Niveau, TypeBureau,Batiment , Bureau ,Paiement, Res
     
 @admin.register(Client)
 class ClientAdmin(admin.ModelAdmin):
-    list_display = ('id', 'user', 'telephone', 'addresse', 'date_naissance', 'created_at')
+    list_display = ('id', 'user', 'user__first_name', 'user__last_name', 'telephone', 'addresse', 'date_naissance', 'created_at')
     search_fields = ('user__first_name', 'user__last_name', 'telephone')
     list_filter = ('created_at',)
+    
+    def get_user(self, obj):
+        return obj.user.get_full_name() or obj.user.username
+    
+    def get_first_name(self, obj):
+        return obj.user.first_name
+    
+    def get_last_name(self, obj):
+        return obj.user.last_name
     
 
 @admin.register(Batiment)

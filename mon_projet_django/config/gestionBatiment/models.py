@@ -2,10 +2,11 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.utils.translation import gettext_lazy as _
 from phonenumber_field.modelfields import PhoneNumberField
+from django.core.exceptions import ValidationError
 from decimal import Decimal
    
 class Client(models.Model):
-    id = models.AutoField
+    id = models.AutoField(primary_key=True)
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='client_profile')
     telephone = PhoneNumberField(region='CM', blank=True, null=True)
     addresse = models.CharField(max_length=255, blank=True, null=True)
@@ -16,9 +17,8 @@ class Client(models.Model):
     def __str__(self):
         return self.user.get_full_name() or self.user.username
     
-    
 class Batiment(models.Model):
-    id = models.AutoField
+    id = models.AutoField(primary_key=True)
     nom = models.CharField(max_length=100)
     adresse = models.CharField(max_length=50)
     nombre_etages = models.IntegerField(default=0)
@@ -31,7 +31,7 @@ class Batiment(models.Model):
         return self.nom
     
 class Niveau(models.Model):
-    id = models.AutoField
+    id = models.AutoField(primary_key=True)
     nom = models.CharField(max_length=50)
     batiment = models.ForeignKey(Batiment, on_delete=models.CASCADE, related_name='niveaux')
     created_at = models.DateTimeField(auto_now_add=True)
@@ -43,7 +43,7 @@ class Niveau(models.Model):
     
     
 class TypeBureau(models.Model):
-    id = models.AutoField
+    id = models.AutoField(primary_key=True)
     nom = models.CharField(max_length=50)
     description = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -54,7 +54,7 @@ class TypeBureau(models.Model):
     
  
 class Bureau(models.Model):
-    id = models.AutoField
+    id = models.AutoField(primary_key=True)
     numero = models.CharField(max_length=20)
     type = models.ForeignKey(TypeBureau, on_delete=models.CASCADE, related_name='bureaux', null=True, blank=True)
     unite = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
@@ -77,7 +77,7 @@ class Bureau(models.Model):
     
 
 class Reservation(models.Model):
-    id = models.AutoField
+    id = models.AutoField(primary_key=True)
     date_debut = models.DateField(null=True, blank=True)
     date_fin = models.DateField(null=True, blank=True)
     bureau = models.ForeignKey(Bureau, on_delete=models.CASCADE, related_name='reservations')
@@ -90,9 +90,17 @@ class Reservation(models.Model):
     def __str__(self):
         return f"Réservation du {self.date_debut} au {self.date_fin} - {self.client.user.first_name} {self.client.user.last_name}"
     
-class Contrat(models.Model):
+    def clean(self):
+        super().clean()
+        if self.date_debut and self.date_fin and self.date_fin < self.date_debut:
+            raise ValidationError({'date_fin': _("La date de fin doit être postérieure à la date de début.")})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()  # Force la validation avant d'enregistrer, peu importe la vue utilisée
+        super().save(*args, **kwargs)
     
-    id = models.AutoField
+class Contrat(models.Model):
+    id = models.AutoField(primary_key=True)
     reservation = models.OneToOneField(Reservation, on_delete=models.CASCADE, related_name='contrat')
     client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='contrats')
     date_debut = models.DateField(null=True, blank=True)
@@ -105,9 +113,33 @@ class Contrat(models.Model):
 
     def __str__(self):
         return f"Contrat du {self.date_debut} au {self.date_fin} - {self.client.user.first_name} {self.client.user.last_name}"
+    def clean(self):
+        super().clean()
+        # Si le montant est rempli et qu'il est inférieur ou égal à 0
+        if self.montant is not None and self.montant <= Decimal('0.00'):
+            # On lève l'erreur spécifique pour le champ 'montant'
+            raise ValidationError({
+                'montant': _("Le montant du paiement doit être strictement supérieur à 0.")
+            })
+
+    # 2. LA FONCTION D'ENREGISTREMENT (SAVE) QUI FORCE LE CLEAN
+    def save(self, *args, **kwargs):
+        self.full_clean()  # C'est cette ligne qui appelle obligatoirement la fonction clean() ci-dessus
+        super().save(*args, **kwargs)
+            
+             
+    def clean(self):
+        super().clean()
+        if self.date_debut and self.date_fin and self.date_fin < self.date_debut:
+            raise ValidationError({'date_fin': _("La date de fin doit être postérieure à la date de début.")})
+
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
 
 class Location(models.Model):
-    id = models.AutoField
+    id = models.AutoField(primary_key=True)
     bureau = models.ForeignKey(Bureau, on_delete=models.CASCADE, related_name='locations')
     client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='locations')
     date_debut = models.DateField(null=True, blank=True)
@@ -119,25 +151,57 @@ class Location(models.Model):
     def __str__(self):
         return f"Location du {self.date_debut} au {self.date_fin} - {self.client.user.first_name} {self.client.user.last_name}"
 
+    def clean(self):
+        super().clean()
+        if self.date_debut and self.date_fin and self.date_fin < self.date_debut:
+            raise ValidationError({'date_fin': _("La date de fin doit être postérieure à la date de début.")})
 
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
 
 class Paiement(models.Model):
-    class paiementStatus(models.TextChoices):
+    class PaiementStatus(models.TextChoices):
         PENDING = 'PENDING', _('En attente')
         COMPLETED = 'PAID', _('Payé')
         FAILED = 'FAILED', _('Échoué') 
         
         
-    id = models.AutoField
+    id = models.AutoField(primary_key=True)
     montant = models.DecimalField(max_digits=10, decimal_places=2)
     date = models.DateField(null=True, blank=True)
-    mode= models.CharField(max_length=20, choices=[('CASH', 'Espèces'), ('CARD', 'Carte bancaire'), ('TRANSFER', 'Virement bancaire')], default='CASH')
+    mode = models.CharField(max_length=20, choices=[('CASH', 'Espèces'), ('CARD', 'Carte bancaire'), ('TRANSFER', 'Virement bancaire')], default='CASH')
     location = models.ForeignKey(Bureau, on_delete=models.CASCADE, related_name='paiements')
     client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='paiements')
+    contrat = models.ForeignKey(Contrat, on_delete=models.CASCADE, related_name='paiements', null=True, blank=True)
+    statut = models.CharField(max_length=20, choices=PaiementStatus.choices, default=PaiementStatus.PENDING)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField(default=True)
-
+    
     def __str__(self):
-        return f"Paiement de {self.montant}€ le {self.date} - {self.client.user.first_name} {self.client.user.last_name}"
- 
+        return f"Paiement de {self.montant}€ [{self.get_statut_display()}] - {self.client.user.first_name} {self.client.user.last_name}"
+
+    # --- NOUVELLE VALIDATION AJOUTÉE ICI ---
+    def clean(self):
+        super().clean()
+        # Vérifie si le montant existe et s'il est inférieur ou égal à 0
+        if self.montant is not None and self.montant <= Decimal('0.00'):
+            raise ValidationError({
+                'montant': _("Le montant du paiement doit être strictement supérieur à 0.")
+            })
+
+    # --- FORCE LA VALIDATION AVANT CHAQUE SAVE ---
+    def save(self, *args, **kwargs):
+        self.full_clean()  # Déclenche automatiquement la méthode clean()
+        super().save(*args, **kwargs)
+
+    @property
+    def reste_a_payer(self):
+        if self.contrat:
+            total_deja_paye = sum(
+                p.montant for p in self.contrat.paiements.filter(statut=self.paiementStatus.COMPLETED)
+            )
+            reste = self.contrat.montant - Decimal(str(total_deja_paye))
+            return max(reste, Decimal('0.00'))
+        return Decimal('0.00') 

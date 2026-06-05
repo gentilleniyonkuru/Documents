@@ -78,7 +78,8 @@ class ReservationViewSet(viewsets.ModelViewSet):
     queryset = Reservation.objects.all()
     serializer_class = ReservationSerializer
     permission_classes = [AllowAny]
-
+    
+    
 class ContratViewSet(viewsets.ModelViewSet):
     """ViewSet pour gérer les Contrats"""
     queryset = Contrat.objects.all()
