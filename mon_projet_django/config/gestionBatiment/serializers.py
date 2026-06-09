@@ -156,8 +156,8 @@ class ReservationSerializer(serializers.ModelSerializer):
     def get_montant_calcule(self, obj):
         if obj.bureau and obj.date_debut and obj.date_fin:
             delta = obj.date_fin - obj.date_debut
-            nombre_jours = delta.days + 1
-            montant_total = nombre_jours * float(obj.bureau.prix)
+            nombre_jours = delta.days 
+            montant_total = nombre_jours * float(obj.bureau.prix)/2
             return montant_total
         return 0.0
     

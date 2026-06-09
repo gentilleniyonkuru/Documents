@@ -86,26 +86,47 @@ class Reservation(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='reservations')
     
-    
     def __str__(self):
         return f"Réservation du {self.date_debut} au {self.date_fin} - {self.client.user.first_name} {self.client.user.last_name}"
     
     def clean(self):
         super().clean()
+        
+        # 1. Vérification de la cohérence des dates
         if self.date_debut and self.date_fin and self.date_fin < self.date_debut:
             raise ValidationError({'date_fin': _("La date de fin doit être postérieure à la date de début.")})
 
+        # 2. Vérification de la disponibilité du bureau (anti-chevauchement)
+        if self.date_debut and self.date_fin and self.bureau:
+            # On cherche s'il existe une réservation existante sur les mêmes dates
+            chevauchements = Reservation.objects.filter(
+                bureau=self.bureau,
+                is_active=True,                  
+                date_debut__lt=self.date_fin,    
+                date_fin__gt=self.date_debut     # Fin existante > Début demandé
+            )
+            
+            # Exclure la réservation actuelle en cas de mise à jour (UPDATE)
+            if self.pk:
+                chevauchements = chevauchements.exclude(pk=self.pk)
+                
+            if chevauchements.exists():
+                raise ValidationError({
+                    'date_debut': _("Ce bureau est déjà réservé pour tout ou partie de ces dates.")
+                })
+
     def save(self, *args, **kwargs):
-        self.full_clean()  # Force la validation avant d'enregistrer, peu importe la vue utilisée
+        self.full_clean()  
         super().save(*args, **kwargs)
-    
+        
+        
 class Contrat(models.Model):
     id = models.AutoField(primary_key=True)
     reservation = models.OneToOneField(Reservation, on_delete=models.CASCADE, related_name='contrat')
     client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='contrats')
     date_debut = models.DateField(null=True, blank=True)
     date_fin = models.DateField(null=True, blank=True)
-    montant = models.DecimalField(max_digits=10, decimal_places=2)
+    montant = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
     description = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -113,29 +134,30 @@ class Contrat(models.Model):
 
     def __str__(self):
         return f"Contrat du {self.date_debut} au {self.date_fin} - {self.client.user.first_name} {self.client.user.last_name}"
+    
     def clean(self):
         super().clean()
-        # Si le montant est rempli et qu'il est inférieur ou égal à 0
+        # Validation du montant
         if self.montant is not None and self.montant <= Decimal('0.00'):
-            # On lève l'erreur spécifique pour le champ 'montant'
             raise ValidationError({
                 'montant': _("Le montant du paiement doit être strictement supérieur à 0.")
             })
-
-    # 2. LA FONCTION D'ENREGISTREMENT (SAVE) QUI FORCE LE CLEAN
-    def save(self, *args, **kwargs):
-        self.full_clean()  # C'est cette ligne qui appelle obligatoirement la fonction clean() ci-dessus
-        super().save(*args, **kwargs)
-            
-             
-    def clean(self):
-        super().clean()
+        # Validation des dates
         if self.date_debut and self.date_fin and self.date_fin < self.date_debut:
             raise ValidationError({'date_fin': _("La date de fin doit être postérieure à la date de début.")})
 
-
     def save(self, *args, **kwargs):
         self.full_clean()
+        
+        # CALCUL AUTOMATIQUE DU MONTANT
+        if self.date_debut and self.date_fin and self.reservation and self.reservation.bureau:
+            delta = self.date_fin - self.date_debut
+            nombre_jours = max(delta.days, 0)
+            # Utiliser Decimal pour le calcul et protéger contre une valeur prix nulle
+            prix_bureau = self.reservation.bureau.prix or Decimal('0.00')
+            montant_total = Decimal(nombre_jours) * prix_bureau
+            self.montant = montant_total
+            
         super().save(*args, **kwargs)
 
 class Location(models.Model):
@@ -198,10 +220,21 @@ class Paiement(models.Model):
 
     @property
     def reste_a_payer(self):
-        if self.contrat:
-            total_deja_paye = sum(
-                p.montant for p in self.contrat.paiements.filter(statut=self.paiementStatus.COMPLETED)
-            )
-            reste = self.contrat.montant - Decimal(str(total_deja_paye))
-            return max(reste, Decimal('0.00'))
-        return Decimal('0.00') 
+        """
+        Calcule dynamiquement le reste à payer sur le contrat associé.
+        """
+        if not self.contrat:
+            return Decimal('0.00')
+
+        paiements_valides = self.contrat.paiements.filter(statut='PAID') 
+        if self.pk:
+            paiements_valides = paiements_valides.exclude(pk=self.pk)
+
+        # 2. Somme des anciens paiements validés
+        total_deja_paye = sum(p.montant for p in paiements_valides)
+        # 3. Si le paiement actuel est EN COURS de validation (PAID), on l'ajoute aussi au calcul
+        if self.statut == 'PAID':
+            total_deja_paye += self.montant
+        # 4. Calcul final
+        reste = self.contrat.montant - Decimal(str(total_deja_paye))
+        return max(reste, Decimal('0.00'))

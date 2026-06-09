@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'gestionBatiment',
     'rest_framework',
+    'phonenumbers',
     'django_filters',
     
     

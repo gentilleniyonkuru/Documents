@@ -2,10 +2,12 @@ from django.http import HttpResponse
 from django.shortcuts import render, get_object_or_404
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, DeleteView
 from django.urls import reverse_lazy
-from rest_framework import viewsets
+from django.core.exceptions import ValidationError as DjangoValidationError
+from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.exceptions import ValidationError
 from .serializers import (
     ClientSerializer, BatimentSerializer, NiveauSerializer, 
     TypeBureauSerializer, BureauSerializer, LocationSerializer,
@@ -78,6 +80,21 @@ class ReservationViewSet(viewsets.ModelViewSet):
     queryset = Reservation.objects.all()
     serializer_class = ReservationSerializer
     permission_classes = [AllowAny]
+    
+    def create(self, request, *args, **kwargs):
+        try:
+            return super().create(request, *args, **kwargs)
+        except DjangoValidationError as e:
+            # Convertir les erreurs de validation du modèle en réponse 400
+            error_dict = e.error_dict if hasattr(e, 'error_dict') else {'detail': str(e)}
+            raise ValidationError(error_dict)
+    
+    def update(self, request, *args, **kwargs):
+        try:
+            return super().update(request, *args, **kwargs)
+        except DjangoValidationError as e:
+            error_dict = e.error_dict if hasattr(e, 'error_dict') else {'detail': str(e)}
+            raise ValidationError(error_dict)
     
     
 class ContratViewSet(viewsets.ModelViewSet):
