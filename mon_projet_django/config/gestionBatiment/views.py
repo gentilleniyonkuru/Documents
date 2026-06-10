@@ -17,6 +17,37 @@ from .serializers import (
 )
 from .models import Client, Batiment, TypeBureau, Bureau, Niveau, Contrat, Location, Paiement, Reservation
 
+
+class BaseModelViewSet(viewsets.ModelViewSet):
+    """Base viewset that converts Django ValidationError into DRF HTTP 400 responses."""
+
+    def _format_django_validation_error(self, exc):
+        if hasattr(exc, 'message_dict'):
+            return exc.message_dict
+        if hasattr(exc, 'error_dict'):
+            return {k: v.messages if hasattr(v, 'messages') else v for k, v in exc.error_dict.items()}
+        if hasattr(exc, 'messages'):
+            return {'detail': exc.messages}
+        return {'detail': str(exc)}
+
+    def create(self, request, *args, **kwargs):
+        try:
+            return super().create(request, *args, **kwargs)
+        except DjangoValidationError as e:
+            raise ValidationError(self._format_django_validation_error(e))
+
+    def update(self, request, *args, **kwargs):
+        try:
+            return super().update(request, *args, **kwargs)
+        except DjangoValidationError as e:
+            raise ValidationError(self._format_django_validation_error(e))
+
+    def partial_update(self, request, *args, **kwargs):
+        try:
+            return super().partial_update(request, *args, **kwargs)
+        except DjangoValidationError as e:
+            raise ValidationError(self._format_django_validation_error(e))
+
 # ==================== Vues simples ====================
 
 def hello(request):
@@ -35,82 +66,62 @@ def index(request):
 
 # ==================== ViewSets API REST ====================
 
-class ClientViewSet(viewsets.ModelViewSet):
+class ClientViewSet(BaseModelViewSet):
     """ViewSet pour gérer les Clients"""
     queryset = Client.objects.all()
     serializer_class = ClientSerializer
     permission_classes = [AllowAny]
 
-class BatimentViewSet(viewsets.ModelViewSet):
+class BatimentViewSet(BaseModelViewSet):
     """ViewSet pour gérer les Bâtiments"""
     queryset = Batiment.objects.all()
     serializer_class = BatimentSerializer
     permission_classes = [AllowAny]
 
-class NiveauViewSet(viewsets.ModelViewSet):
+class NiveauViewSet(BaseModelViewSet):
     """ViewSet pour gérer les Niveaux"""
     queryset = Niveau.objects.all()
     serializer_class = NiveauSerializer
     permission_classes = [AllowAny]
 
-class TypeBureauViewSet(viewsets.ModelViewSet):
+class TypeBureauViewSet(BaseModelViewSet):
     """ViewSet pour gérer les Types de Bureau"""
     queryset = TypeBureau.objects.all()
     serializer_class = TypeBureauSerializer
     permission_classes = [AllowAny]
 
-class BureauViewSet(viewsets.ModelViewSet):
+class BureauViewSet(BaseModelViewSet):
     """ViewSet pour gérer les Bureaux"""
     queryset = Bureau.objects.all()
     serializer_class = BureauSerializer
     permission_classes = [AllowAny] 
     
-# Action personnalisé pour filtrer les bureaux par type
+    # Action personnalisé pour filtrer les bureaux par type
     @action(detail=False, methods=['get'], url_path='par-type/(?P<type_id>[0-9]+)')
-    
     def par_type(self, request, type_id=None):
-
         bureaux = Bureau.objects.filter(type_id=type_id, is_active=True)
         serializer = self.get_serializer(bureaux, many=True)
         return Response(serializer.data)
 
-
-class ReservationViewSet(viewsets.ModelViewSet):
+class ReservationViewSet(BaseModelViewSet):
     """ViewSet pour gérer les Réservations"""
     queryset = Reservation.objects.all()
     serializer_class = ReservationSerializer
     permission_classes = [AllowAny]
-    
-    def create(self, request, *args, **kwargs):
-        try:
-            return super().create(request, *args, **kwargs)
-        except DjangoValidationError as e:
-            # Convertir les erreurs de validation du modèle en réponse 400
-            error_dict = e.error_dict if hasattr(e, 'error_dict') else {'detail': str(e)}
-            raise ValidationError(error_dict)
-    
-    def update(self, request, *args, **kwargs):
-        try:
-            return super().update(request, *args, **kwargs)
-        except DjangoValidationError as e:
-            error_dict = e.error_dict if hasattr(e, 'error_dict') else {'detail': str(e)}
-            raise ValidationError(error_dict)
-    
-    
-class ContratViewSet(viewsets.ModelViewSet):
+
+class ContratViewSet(BaseModelViewSet):
     """ViewSet pour gérer les Contrats"""
     queryset = Contrat.objects.all()
     serializer_class = ContratSerializer
     permission_classes = [AllowAny]
     
-class LocationViewSet(viewsets.ModelViewSet):
+class LocationViewSet(BaseModelViewSet):
     """ViewSet pour gérer les Locations"""
     queryset = Location.objects.all()
     serializer_class = LocationSerializer   
     permission_classes = [AllowAny]
     
-
-class PaiementViewSet(viewsets.ModelViewSet):
+class PaiementViewSet(BaseModelViewSet):
     """ViewSet pour gérer les Paiements"""
     queryset = Paiement.objects.all()
     serializer_class = PaiementSerializer

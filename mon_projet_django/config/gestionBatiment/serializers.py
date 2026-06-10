@@ -5,18 +5,13 @@ from .models import Client, Batiment, Niveau,  TypeBureau, Bureau, Reservation, 
 
 
 class ClientSerializer(serializers.ModelSerializer):
+    user_detail = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = Client
-        fields = ['id',   
-                  'user', 
-                  'telephone', 
-                  'addresse', 
-                  'date_naissance',
-                  'created_at', 
-                  'updated_at'
-                  ]
+        fields = ['id', 'user', 'user_detail', 'telephone', 'addresse', 'date_naissance', 'created_at', 'updated_at']
 
-    def get_user(self, obj):
+    def get_user_detail(self, obj):
         if obj.user:
             return {
                 'id': obj.user.id,
@@ -36,11 +31,13 @@ class BatimentSerializer(serializers.ModelSerializer):
 
 
 class NiveauSerializer(serializers.ModelSerializer):
+    batiment_detail = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = Niveau
-        fields = ['id', 'nom', 'batiment', 'created_at', 'updated_at', 'is_active']
+        fields = ['id', 'nom', 'batiment', 'batiment_detail', 'created_at', 'updated_at', 'is_active']
     
-    def get_batiment(self, obj):
+    def get_batiment_detail(self, obj):
         if obj.batiment:
             return {
                 'id': obj.batiment.id,
@@ -59,11 +56,15 @@ class TypeBureauSerializer(serializers.ModelSerializer):
 
 
 class BureauSerializer(serializers.ModelSerializer):
+    type_detail = serializers.SerializerMethodField(read_only=True)
+    batiment_detail = serializers.SerializerMethodField(read_only=True)
+    niveau_detail = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = Bureau
-        fields = ['id', 'numero', 'type', 'unite', 'espace', 'prix', 'batiment', 'niveau', 'created_at', 'updated_at', 'is_active']
+        fields = ['id', 'numero', 'type', 'type_detail', 'unite', 'espace', 'prix', 'batiment', 'batiment_detail', 'niveau', 'niveau_detail', 'created_at', 'updated_at', 'is_active']
 
-    def get_type(self, obj):
+    def get_type_detail(self, obj):
         if obj.type:
             return {
                 'id': obj.type.id,
@@ -72,7 +73,7 @@ class BureauSerializer(serializers.ModelSerializer):
             }
         return None
 
-    def get_batiment(self, obj):
+    def get_batiment_detail(self, obj):
         if obj.batiment:
             return {
                 'id': obj.batiment.id,
@@ -80,6 +81,15 @@ class BureauSerializer(serializers.ModelSerializer):
                 'adresse': obj.batiment.adresse,
                 'nombre_etages': obj.batiment.nombre_etages,
                 'date_construction': obj.batiment.date_construction,
+            }
+        return None
+
+    def get_niveau_detail(self, obj):
+        if obj.niveau:
+            return {
+                'id': obj.niveau.id,
+                'nom': obj.niveau.nom,
+                'batiment': obj.niveau.batiment.id if obj.niveau.batiment else None,
             }
         return None
 
@@ -93,15 +103,17 @@ class ContratSerializer(serializers.ModelSerializer):
        
         
 class LocationSerializer(serializers.ModelSerializer):
+    client_detail = serializers.SerializerMethodField(read_only=True)
     created_at = serializers.DateTimeField(read_only=True)
     updated_at = serializers.DateTimeField(read_only=True)
     is_active = serializers.BooleanField(default=True)
+
     class Meta:
         model = Location
-        fields = ['id', 'date_debut', 'date_fin', 'bureau', 'client', 'created_at', 'updated_at', 'is_active']
+        fields = ['id', 'date_debut', 'date_fin', 'bureau', 'client', 'client_detail', 'created_at', 'updated_at', 'is_active']
        
        
-    def get_client(self, obj):
+    def get_client_detail(self, obj):
         if obj.client:
             return {
                 'id': obj.client.id,
@@ -112,13 +124,14 @@ class LocationSerializer(serializers.ModelSerializer):
                     'last_name': obj.client.user.last_name,
                     'email': obj.client.user.email,
                 },
-                'telephone': obj.client.telephone,
+                'telephone': str(obj.client.telephone) if obj.client.telephone else None,
                 'addresse': obj.client.addresse,
                 'date_naissance': obj.client.date_naissance,
             }
         return None 
 
 class PaiementSerializer(serializers.ModelSerializer):
+    client_detail = serializers.SerializerMethodField(read_only=True)
     mode = serializers.ChoiceField(choices=[('CASH', 'Espèces'), ('CARD', 'Carte bancaire'), ('TRANSFER', 'Virement bancaire')], default='CASH')
     montant = serializers.FloatField()
     created_at = serializers.DateTimeField(read_only=True)
@@ -127,9 +140,9 @@ class PaiementSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Paiement
-        fields = ['id', 'date', 'montant', 'mode', 'location', 'client','contrat', 'statut', 'created_at', 'updated_at', 'is_active']
+        fields = ['id', 'date', 'montant', 'mode', 'location', 'client', 'client_detail', 'contrat', 'statut', 'created_at', 'updated_at', 'is_active']
 
-    def get_client(self, obj):
+    def get_client_detail(self, obj):
         if obj.client:
             return {
                 'id': obj.client.id,
@@ -140,7 +153,7 @@ class PaiementSerializer(serializers.ModelSerializer):
                     'last_name': obj.client.user.last_name,
                     'email': obj.client.user.email,
                 },
-                'telephone': obj.client.telephone,
+                'telephone': str(obj.client.telephone) if obj.client.telephone else None,
                 'addresse': obj.client.addresse,
                 'date_naissance': obj.client.date_naissance,
             }
@@ -148,20 +161,22 @@ class PaiementSerializer(serializers.ModelSerializer):
 
 class ReservationSerializer(serializers.ModelSerializer):
     montant_calcule = serializers.SerializerMethodField(read_only=True)
+    client_detail = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = Reservation
-        fields = ['id', 'date_debut', 'montant_calcule', 'date_fin', 'bureau', 'client', 'created_at', 'updated_at', 'is_active']
+        fields = ['id', 'date_debut', 'montant_calcule', 'date_fin', 'bureau', 'client', 'client_detail', 'created_at', 'updated_at', 'is_active']
         
 
     def get_montant_calcule(self, obj):
         if obj.bureau and obj.date_debut and obj.date_fin:
             delta = obj.date_fin - obj.date_debut
             nombre_jours = delta.days 
-            montant_total = nombre_jours * float(obj.bureau.prix)/2
+            montant_total = nombre_jours * float(obj.bureau.prix) / 2
             return montant_total
         return 0.0
     
-    def get_client(self, obj):
+    def get_client_detail(self, obj):
         if obj.client:
             return {
                 'id': obj.client.id,
@@ -172,7 +187,7 @@ class ReservationSerializer(serializers.ModelSerializer):
                     'last_name': obj.client.user.last_name,
                     'email': obj.client.user.email,
                 },
-                'telephone': obj.client.telephone,
+                'telephone': str(obj.client.telephone) if obj.client.telephone else None,
                 'addresse': obj.client.addresse,
                 'date_naissance': obj.client.date_naissance,
             }
