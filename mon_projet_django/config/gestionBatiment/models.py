@@ -7,8 +7,22 @@ from django.utils import timezone  # Ajouté pour gérer la date du jour
 from decimal import Decimal
 
 class Client(models.Model):
+    class UserRole(models.TextChoices):
+        ADMIN = 'ADMIN', _('Administrateur')
+        TRAVAILLEUR = 'TRAVAILLEUR', _('Travailleur')
+        MANAGER = 'MANAGER', _('Gestionnaire')
+        CLIENT = 'CLIENT', _('Personnel')
+
     id = models.AutoField(primary_key=True)
-    user = models.OneToOneField (User, on_delete=models.CASCADE, related_name='client_profile')
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='client_profile')
+
+    # Nouvelle catégorie pour gérer les permissions dans les views
+    role = models.CharField(
+        max_length=15,
+        choices=UserRole.choices,
+        default=UserRole.CLIENT
+    )
+    
     telephone = PhoneNumberField(region='CM', blank=True, null=True)
     addresse = models.CharField(max_length=255, blank=True, null=True)
     date_naissance = models.DateField(blank=True, null=True)
@@ -289,6 +303,17 @@ class Paiement(models.Model):
             raise ValidationError({'location': _("Impossible d'enregistrer un paiement pour une location expirée.")})
 
     def save(self, *args, **kwargs):
+        # Récupérer l'utilisateur qui fait l'action (passé depuis la vue)
+        user_performing_action = kwargs.pop('user', None)
+
+        if user_performing_action and hasattr(user_performing_action, 'client_profile'):
+            role_utilisateur = user_performing_action.client_profile.role
+            
+            # --- APPLICATION DE LA PROPOSITION 2 ---
+            # Si le montant dépasse 100 000 CFA et que c'est un travailleur qui tente de valider directement en 'PAID'
+            if self.montant > Decimal('100000.00') and role_utilisateur in ['AGENT', 'TRAVAILLEUR', 'MANAGER'] and self.statut == 'PAID':
+                # On force le statut en attente de l'administrateur
+                self.statut = self.PaiementStatus.PENDING_ADMIN
         self.full_clean()  
         super().save(*args, **kwargs)
 
