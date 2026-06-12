@@ -16,6 +16,12 @@ from .serializers import (
 
 )
 from .models import Client, Batiment, TypeBureau, Bureau, Niveau, Contrat, Location, Paiement, Reservation
+from .permissions import (
+    ClientPermission, BatimentPermission, NiveauPermission,
+    TypeBureauPermission, BureauPermission, ReservationPermission,
+    ContratPermission, LocationPermission, PaiementPermission,
+    ADMIN_ROLE, WORKER_ROLES, CLIENT_ROLES
+)
 
 
 class BaseModelViewSet(viewsets.ModelViewSet):
@@ -76,79 +82,6 @@ class BaseModelViewSet(viewsets.ModelViewSet):
         return None
 
 
-ADMIN_ROLE = 'ADMIN'
-WORKER_ROLES = ['TRAVAILLEUR', 'MANAGER', 'AGENT']
-CLIENT_ROLES = ['CLIENT']
-
-
-class RoleBasedPermission(permissions.BasePermission):
-    """Permissions based on user role and HTTP method.
-
-    - ADMIN: accès total
-    - TRAVAILLEUR / MANAGER / AGENT: GET + POST uniquement
-    - CLIENT: GET uniquement
-    """
-
-    def has_permission(self, request, view):
-        if not request.user or not request.user.is_authenticated:
-            return False
-
-        role = getattr(view, 'get_user_role', None)
-        if callable(role):
-            role = view.get_user_role()
-        else:
-            profile = getattr(request.user, 'client_profile', None)
-            if profile is None:
-                groups = set(request.user.groups.values_list('name', flat=True))
-                if ADMIN_ROLE in groups:
-                    role = ADMIN_ROLE
-                elif groups.intersection(WORKER_ROLES):
-                    role = next(r for r in WORKER_ROLES if r in groups)
-                elif CLIENT_ROLES[0] in groups:
-                    role = CLIENT_ROLES[0]
-                else:
-                    role = None
-            else:
-                role = profile.role
-
-        if role == ADMIN_ROLE:
-            return True
-        if role in WORKER_ROLES:
-            return request.method in ('GET', 'HEAD', 'OPTIONS', 'POST')
-        if role in CLIENT_ROLES:
-            return request.method in permissions.SAFE_METHODS
-        return False
-
-    def has_object_permission(self, request, view, obj):
-        if not request.user or not request.user.is_authenticated:
-            return False
-
-        role = getattr(view, 'get_user_role', None)
-        if callable(role):
-            role = view.get_user_role()
-        else:
-            profile = getattr(request.user, 'client_profile', None)
-            if profile is None:
-                groups = set(request.user.groups.values_list('name', flat=True))
-                if ADMIN_ROLE in groups:
-                    role = ADMIN_ROLE
-                elif groups.intersection(WORKER_ROLES):
-                    role = next(r for r in WORKER_ROLES if r in groups)
-                elif CLIENT_ROLES[0] in groups:
-                    role = CLIENT_ROLES[0]
-                else:
-                    role = None
-            else:
-                role = profile.role
-
-        if role == ADMIN_ROLE:
-            return True
-        if role in WORKER_ROLES:
-            return request.method in ('GET', 'HEAD', 'OPTIONS', 'POST')
-        if role in CLIENT_ROLES:
-            return request.method in permissions.SAFE_METHODS
-        return False
-
 # ==================== Vues simples ====================
 
 def hello(request):
@@ -170,7 +103,7 @@ def index(request):
 class ClientViewSet(BaseModelViewSet):
     """ViewSet pour gérer les Clients"""
     serializer_class = ClientSerializer
-    permission_classes = [RoleBasedPermission]
+    permission_classes = [ClientPermission]
 
     def get_queryset(self):
         user = self.request.user
@@ -200,7 +133,7 @@ class ClientViewSet(BaseModelViewSet):
 class BatimentViewSet(BaseModelViewSet):
     """ViewSet pour gérer les Bâtiments"""
     serializer_class = BatimentSerializer
-    permission_classes = [RoleBasedPermission]
+    permission_classes = [BatimentPermission]
 
     def get_queryset(self):
         role = self.get_user_role()
@@ -235,7 +168,7 @@ class BatimentViewSet(BaseModelViewSet):
 class NiveauViewSet(BaseModelViewSet):
     """ViewSet pour gérer les Niveaux"""
     serializer_class = NiveauSerializer
-    permission_classes = [RoleBasedPermission]
+    permission_classes = [NiveauPermission]
 
     def get_queryset(self):
         role = self.get_user_role()
@@ -259,7 +192,7 @@ class NiveauViewSet(BaseModelViewSet):
 class TypeBureauViewSet(BaseModelViewSet):
     """ViewSet pour gérer les Types de Bureau"""
     serializer_class = TypeBureauSerializer
-    permission_classes = [RoleBasedPermission]
+    permission_classes = [TypeBureauPermission]
 
     def get_queryset(self):
         role = self.get_user_role()
@@ -283,7 +216,7 @@ class TypeBureauViewSet(BaseModelViewSet):
 class BureauViewSet(BaseModelViewSet):
     """ViewSet pour gérer les Bureaux"""
     serializer_class = BureauSerializer
-    permission_classes = [RoleBasedPermission]
+    permission_classes = [BureauPermission]
 
     def get_queryset(self):
         user = self.request.user
@@ -328,7 +261,7 @@ class BureauViewSet(BaseModelViewSet):
 class ReservationViewSet(BaseModelViewSet):
     """ViewSet pour gérer les Réservations"""
     serializer_class = ReservationSerializer
-    permission_classes = [RoleBasedPermission]
+    permission_classes = [ReservationPermission]
 
     def get_queryset(self):
         profile = self.get_client_profile()
@@ -362,7 +295,7 @@ class ReservationViewSet(BaseModelViewSet):
 class ContratViewSet(BaseModelViewSet):
     """ViewSet pour gérer les Contrats"""
     serializer_class = ContratSerializer
-    permission_classes = [RoleBasedPermission]
+    permission_classes = [ContratPermission]
 
     def get_queryset(self):
         profile = self.get_client_profile()
@@ -396,7 +329,7 @@ class ContratViewSet(BaseModelViewSet):
 class LocationViewSet(BaseModelViewSet):
     """ViewSet pour gérer les Locations"""
     serializer_class = LocationSerializer
-    permission_classes = [RoleBasedPermission]
+    permission_classes = [LocationPermission]
 
     def get_queryset(self):
         profile = self.get_client_profile()
@@ -430,7 +363,7 @@ class LocationViewSet(BaseModelViewSet):
 class PaiementViewSet(BaseModelViewSet):
     """ViewSet pour gérer les Paiements"""
     serializer_class = PaiementSerializer
-    permission_classes = [RoleBasedPermission]
+    permission_classes = [PaiementPermission]
 
     def get_queryset(self):
         profile = self.get_client_profile()
