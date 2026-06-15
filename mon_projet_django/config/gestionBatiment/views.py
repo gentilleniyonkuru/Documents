@@ -4,12 +4,14 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 from rest_framework import viewsets, status
 from rest_framework import permissions
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import ValidationError
 from .serializers import (
-    ClientSerializer, BatimentSerializer, NiveauSerializer, 
+    
+    ClientSerializer,BatimentSerializer, NiveauSerializer, 
     TypeBureauSerializer, BureauSerializer, LocationSerializer,
     ContratSerializer, PaiementSerializer, 
     ReservationSerializer
@@ -100,35 +102,23 @@ def index(request):
 
 # ==================== ViewSets API REST ====================
 
-class ClientViewSet(BaseModelViewSet):
+class ClientViewSet(viewsets.ModelViewSet):
     """ViewSet pour gérer les Clients"""
     serializer_class = ClientSerializer
-    permission_classes = [ClientPermission]
+    ordering = ['user_id']  # Correction de l'erreur OperationalError (no such column: id)
 
     def get_queryset(self):
-        user = self.request.user
-        profile = self.get_client_profile()
-        role = self.get_user_role()
+        # On ajoute le order_by('user_id') pour sécuriser toutes les requêtes GET
+        return Client.objects.all().order_by('user_id')
 
-        if role == ADMIN_ROLE or role in WORKER_ROLES:
-            return Client.objects.all()
-
-        if role in CLIENT_ROLES and profile is not None:
-            return Client.objects.filter(user=user)
-
-        return Client.objects.none()
-
-    def perform_create(self, serializer):
-        profile = self.get_client_profile()
-        role = self.get_user_role()
-        if role in CLIENT_ROLES and profile is None:
-            serializer.save(user=self.request.user)
-        else:
-            serializer.save()
-
-    def perform_update(self, serializer):
-        serializer.save()
-
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny], url_path='inscription')
+    def inscription(self, request):
+        """Action publique permettant au client de s'enregistrer tout seul"""
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            client = serializer.save()
+            return Response(self.get_serializer(client).data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class BatimentViewSet(BaseModelViewSet):
     """ViewSet pour gérer les Bâtiments"""

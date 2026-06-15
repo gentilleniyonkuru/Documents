@@ -4,31 +4,74 @@ from .models import Client, Batiment, Niveau,  TypeBureau, Bureau, Reservation, 
 
 
 
+
 class ClientSerializer(serializers.ModelSerializer):
+    # Lecture (Affichage lors d'un GET)
     user_detail = serializers.SerializerMethodField(read_only=True)
+    user_id = serializers.IntegerField(source='user.id', read_only=True)
+
+    # Écriture (Champs requis pour l'inscription POST)
+    username = serializers.CharField(write_only=True, required=True, max_length=150)
+    password = serializers.CharField(write_only=True, required=True)
+    email = serializers.EmailField(write_only=True, required=True)
+    first_name = serializers.CharField(write_only=True, required=True, max_length=150)
+    last_name = serializers.CharField(write_only=True, required=True, max_length=150)
 
     class Meta:
         model = Client
-        fields = ['id', 'user', 'user_detail', 'telephone', 'addresse', 'date_naissance', 'created_at', 'updated_at']
+        fields = [
+            'user_id', 'user_detail', 'username', 'password', 'email', 
+            'first_name', 'last_name', 'telephone', 'addresse', 
+            'date_naissance', 'created_at', 'updated_at'
+        ]
 
     def get_user_detail(self, obj):
-        if obj.user:
-            return {
-                'id': obj.user.id,
-                'username': obj.user.username,
-                'first_name': obj.user.first_name,
-                'last_name': obj.user.last_name,
-                'email': obj.user.email,
-            }
-        return None
-        
+        return {
+            "username": obj.user.username,
+            "email": obj.user.email,
+            "first_name": obj.user.first_name,
+            "last_name": obj.user.last_name
+        }
+
+    def validate_username(self, value):
+        if User.objects.filter(username=value).exists():
+            raise serializers.ValidationError("Ce nom d'utilisateur est déjà pris.")
+        return value
+
+    def create(self, validated_data):
+        # 1. Extraction des données du User
+        username = validated_data.pop('username')
+        password = validated_data.pop('password')
+        email = validated_data.pop('email')
+        first_name = validated_data.pop('first_name')
+        last_name = validated_data.pop('last_name')
+
+        # 2. Création sécurisée du User
+        user = User.objects.create(
+            username=username,
+            email=email,
+            first_name=first_name,
+            last_name=last_name
+        )
+        user.set_password(password)
+        user.save()
+
+        # 3. Création automatique du Client avec le même ID
+        client = Client.objects.create(
+            user=user,
+            role=Client.UserRole.CLIENT,
+            telephone=validated_data.get('telephone'),
+            addresse=validated_data.get('addresse'),
+            date_naissance=validated_data.get('date_naissance')
+        )
+        return client
+
 class BatimentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Batiment
         fields = ['id', 'nom', 'adresse', 'nombre_etages', 'date_construction', 'created_at', 'updated_at', 'is_active']
         
         
-
 
 class NiveauSerializer(serializers.ModelSerializer):
     batiment_detail = serializers.SerializerMethodField(read_only=True)
