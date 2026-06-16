@@ -46,7 +46,7 @@ class ClientSerializer(serializers.ModelSerializer):
         first_name = validated_data.pop('first_name')
         last_name = validated_data.pop('last_name')
 
-        # 2. Création sécurisée du User
+        # 2. Creation sécurisée du User
         user = User.objects.create(
             username=username,
             email=email,
@@ -56,7 +56,7 @@ class ClientSerializer(serializers.ModelSerializer):
         user.set_password(password)
         user.save()
 
-        # 3. Création automatique du Client avec le même ID
+        # 3. Creation automatique du Client avec le meme ID
         client = Client.objects.create(
             user=user,
             role=Client.UserRole.CLIENT,
