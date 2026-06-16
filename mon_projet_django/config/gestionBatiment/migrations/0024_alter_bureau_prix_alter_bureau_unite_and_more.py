@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('gestionBatiment', '0023_alter_client_role'),
+        ('gestionBatiment', '0001_initial'),
     ]
 
     operations = [

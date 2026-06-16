@@ -77,10 +77,10 @@ class ReservationAdmin(admin.ModelAdmin):
 
 @admin.register(Contrat)
 class ContratAdmin(admin.ModelAdmin):
-    list_display = ('id', 'client', 'reservation', 'date_debut', 'date_fin', 'montant', 'statut_temporel', 'is_active')
+    list_display = ('id', 'client', 'reservation', 'date_debut', 'date_fin', 'loyer_mensuel', 'statut_temporel', 'is_active')
     search_fields = ('client__user__first_name', 'client__user__last_name', 'reservation__bureau__numero')
     list_filter = ('is_active', 'date_debut', 'date_fin')
-    readonly_fields = ('montant',) # Géré automatiquement dans le modèle désormais
+    readonly_fields = ('loyer_mensuel',) # Géré automatiquement dans le modèle désormais
 
 
 @admin.register(Location)
@@ -91,13 +91,106 @@ class LocationAdmin(admin.ModelAdmin):
     list_filter = ('is_active', 'date_debut', 'date_fin')
 
 
+# @admin.register(Paiement)
+# class PaiementAdmin(admin.ModelAdmin):
+    
+#     #list_display = ('id', 'client', 'loyer_mensuel', 'reste_a_payer_visuel', 'statut', 'mode', 'contrat', 'location', 'date')
+#     # CODE ACTUEL (À MODIFIER)
+#     list_display = ['id', 'contrat', 'loyer_mensuel', 'montant_verse', 'mois_paye', 'annee_paye']
+#     search_fields = ('client__user__first_name', 'client__user__last_name', 'contrat__id')
+#     list_filter = ('statut', 'mode', 'date')
+
+#     def reste_a_payer_visuel(self, obj):
+#         return f"{obj.reste_a_payer} CFA"
+#     reste_a_payer_visuel.short_description = "Reste à payer"
+#     @admin.display(ordering='contrat__loyer_mensuel', description='Loyer Mensuel Prévu')
+#     def get_loyer_mensuel(self, obj):
+#         # On va chercher le loyer mensuel dans le contrat lié au paiement
+#         return obj.contrat.loyer_mensuel if obj.contrat else "-"
+
+# @admin.register(Paiement)
+# class PaiementAdmin(admin.ModelAdmin):
+#     # 1. Correction : On utilise 'get_loyer_mensuel' à la place de 'loyer_mensuel'
+#     list_display = ['id', 'contrat', 'get_loyer_mensuel', 'montant_verse', 'mois_paye', 'annee_paye', 'reste_a_payer_visuel']
+    
+#     # 2. Sécurité pour la recherche : on cherche via le contrat lié
+#     search_fields = ('contrat__client__user__first_name', 'contrat__client__user__last_name', 'contrat__id')
+    
+#     # 3. Filtres basés sur les champs existants de ton modèle Paiement
+#     list_filter = ('annee_paye', 'mois_paye', 'date_paiement')
+
+#     # --- FONCTIONS D'AFFICHAGE PERSONNALISÉES ---
+
+#     @admin.display(ordering='contrat__loyer_mensuel', description='Loyer Mensuel Prévu')
+#     def get_loyer_mensuel(self, obj):
+#         # On remonte au contrat pour afficher le loyer mensuel prévu
+#         return f"{obj.contrat.loyer_mensuel} CFA" if obj.contrat and obj.contrat.loyer_mensuel else "-"
+
+#     def reste_a_payer_visuel(self, obj):
+#         # Si tu as une propriété ou un champ 'reste_a_payer' calculé dans ton modèle Paiement
+#         if hasattr(obj, 'reste_a_payer') and obj.reste_a_payer is not None:
+#             return f"{obj.reste_a_payer} CFA"
+        
+#         # Logique alternative automatique : Loyer prévu - Montant versé
+#         if obj.contrat and obj.contrat.loyer_mensuel:
+#             reste = obj.contrat.loyer_mensuel - obj.montant_verse
+#             return f"{reste} CFA"
+#         return "-"
+        
+#     reste_a_payer_visuel.short_description = "Reste à payer"
+
+# @admin.register(Paiement)
+# class PaiementAdmin(admin.ModelAdmin):
+#     # CORRECTION : On utilise 'montant' à la place de 'montant_verse'
+#     list_display = ['id', 'contrat', 'get_loyer_mensuel', 'montant', 'mois_paye', 'annee_paye', 'reste_a_payer_visuel']
+    
+#     search_fields = ('contrat__client__user__first_name', 'contrat__client__user__last_name', 'contrat__id')
+    
+#     # CORRECTION : On utilise 'date' à la place de 'date_paiement'
+#     list_filter = ('annee_paye', 'mois_paye', 'date')
+
+#     # --- FONCTIONS D'AFFICHAGE PERSONNALISÉES ---
+
+#     @admin.display(ordering='contrat__loyer_mensuel', description='Loyer Mensuel Prévu')
+#     def get_loyer_mensuel(self, obj):
+#         return f"{obj.contrat.loyer_mensuel} CFA" if obj.contrat and obj.contrat.loyer_mensuel else "-"
+
+#     def reste_a_payer_visuel(self, obj):
+#         if hasattr(obj, 'reste_a_payer') and obj.reste_a_payer is not None:
+#             return f"{obj.reste_a_payer} CFA"
+        
+#         # Logique de secours basée sur tes champs exacts ('montant' au lieu de 'montant_verse')
+#         if obj.contrat and obj.contrat.loyer_mensuel:
+#             reste = obj.contrat.loyer_mensuel - obj.montant
+#             return f"{reste} CFA"
+#         return "-"
+        
+#     reste_a_payer_visuel.short_description = "Reste à payer"
+# @admin.register(Paiement)
+# class PaiementAdmin(admin.ModelAdmin):
+#     # On affiche 'get_loyer_mensuel_30' et 'reste_a_payer_visuel'
+#     list_display = ['id', 'contrat', 'get_loyer_mensuel_30', 'montant', 'mois_paye', 'annee_paye', 'reste_a_payer_visuel']
+    
+#     search_fields = ('contrat__client__user__first_name', 'contrat__client__user__last_name', 'contrat__id')
+#     list_filter = ('annee_paye', 'mois_paye', 'date')
+
+#     @admin.display(ordering='contrat__loyer_mensuel', description='Loyer Mensuel Prévu (30j)')
+#     def get_loyer_mensuel_30(self, obj):
+#         return f"{obj.loyer_mensuel_prevu_30_jours} CFA"
+
+#     @admin.display(description='Reste à payer')
+#     def reste_a_payer_visuel(self, obj):
+#         return f"{obj.reste_a_payer} CFA"
 @admin.register(Paiement)
 class PaiementAdmin(admin.ModelAdmin):
-    
-    list_display = ('id', 'client', 'montant', 'reste_a_payer_visuel', 'statut', 'mode', 'contrat', 'location', 'date')
-    search_fields = ('client__user__first_name', 'client__user__last_name', 'contrat__id')
-    list_filter = ('statut', 'mode', 'date')
+    list_display = ['id', 'contrat', 'get_loyer_mensuel_30', 'montant', 'mois_paye', 'annee_paye', 'reste_a_payer_visuel']
+    search_fields = ('contrat__client__user__first_name', 'contrat__client__user__last_name', 'contrat__id')
+    list_filter = ('annee_paye', 'mois_paye', 'date')
 
+    @admin.display(description='Loyer Mensuel Prévu (30j)')
+    def get_loyer_mensuel_30(self, obj):
+        return f"{obj.loyer_mensuel_prevu_30_jours} CFA"
+
+    @admin.display(description='Reste à payer')
     def reste_a_payer_visuel(self, obj):
         return f"{obj.reste_a_payer} CFA"
-    reste_a_payer_visuel.short_description = "Reste à payer"

@@ -142,7 +142,7 @@ class ContratSerializer(serializers.ModelSerializer):
     is_active = serializers.BooleanField(default=True)
     class Meta:
         model = Contrat
-        fields = ['id', 'reservation', 'client', 'date_debut', 'date_fin', 'montant', 'description', 'created_at', 'updated_at', 'is_active']
+        fields = ['id', 'reservation', 'client', 'date_debut', 'date_fin', 'loyer_mensuel', 'description', 'created_at', 'updated_at', 'is_active']
        
         
 class LocationSerializer(serializers.ModelSerializer):

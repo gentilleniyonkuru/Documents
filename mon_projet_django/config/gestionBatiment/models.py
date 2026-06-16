@@ -184,20 +184,68 @@ class Reservation(models.Model):
         super().save(*args, **kwargs)
         
         
+#class Contrat(models.Model):
+    # id = models.AutoField(primary_key=True)
+    # reservation = models.OneToOneField(Reservation, on_delete=models.CASCADE, related_name='contrat')
+    # client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='contrats')
+    # date_debut = models.DateField(null=True, blank=True)
+    # date_fin = models.DateField(null=True, blank=True)
+    # montant = models.DecimalField(max_digits=14, decimal_places=2, blank=True, null=True)
+    # description = models.TextField(blank=True, null=True)
+    # created_at = models.DateTimeField(auto_now_add=True)
+    # updated_at = models.DateTimeField(auto_now=True)
+    # is_active = models.BooleanField(default=True)
+
+    # def __str__(self):
+    #     return f"Contrat du {self.date_debut} au {self.date_fin} - {self.client.user.first_name} {self.client.user.last_name}"
+    
+    # # --- STATUT TEMPOREL DYNAMIQUE ---
+    # @property
+    # def statut_temporel(self):
+    #     aujourdhui = timezone.now().date()
+    #     if self.date_debut and aujourdhui < self.date_debut:
+    #         return "À VENIR"
+    #     elif self.date_debut and self.date_fin and self.date_debut <= aujourdhui <= self.date_fin:
+    #         return "EN COURS"
+    #     elif self.date_fin and aujourdhui > self.date_fin:
+    #         return "EXPIRÉ"
+    #     return "INCONNU"
+
+    # def clean(self):
+    #     super().clean()
+    #     if self.montant is not None and self.montant <= Decimal('0.00'):
+    #         raise ValidationError({'montant': _("Le montant du contrat doit être strictement supérieur à 0.")})
+    #     if self.date_debut and self.date_fin and self.date_fin < self.date_debut:
+    #         raise ValidationError({'date_fin': _("La date de fin doit être postérieure à la date de début.")})
+
+    # def save(self, *args, **kwargs):
+    #     if self.date_debut and self.date_fin and self.reservation and self.reservation.bureau:
+    #         delta = self.date_fin - self.date_debut
+    #         nombre_jours = max(delta.days, 0)
+    #         prix_bureau = self.reservation.bureau.prix or Decimal('0.00')
+    #         self.montant = Decimal(nombre_jours) * prix_bureau
+            
+    #     self.full_clean()
+    #     super().save(*args, **kwargs)
+
 class Contrat(models.Model):
     id = models.AutoField(primary_key=True)
     reservation = models.OneToOneField(Reservation, on_delete=models.CASCADE, related_name='contrat')
     client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='contrats')
     date_debut = models.DateField(null=True, blank=True)
     date_fin = models.DateField(null=True, blank=True)
-    montant = models.DecimalField(max_digits=14, decimal_places=2, blank=True, null=True)
+    
+    # Remplacement de montant par loyer_mensuel
+    loyer_mensuel = models.DecimalField(max_digits=14, decimal_places=2, blank=True, null=True)
+    
     description = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField(default=True)
 
     def __str__(self):
-        return f"Contrat du {self.date_debut} au {self.date_fin} - {self.client.user.first_name} {self.client.user.last_name}"
+        nom_client = f"{self.client.user.first_name} {self.client.user.last_name}" if self.client.user else f"Client #{self.client.id}"
+        return f"Contrat du {self.date_debut} au {self.date_fin} - {nom_client}"
     
     # --- STATUT TEMPOREL DYNAMIQUE ---
     @property
@@ -213,17 +261,21 @@ class Contrat(models.Model):
 
     def clean(self):
         super().clean()
-        if self.montant is not None and self.montant <= Decimal('0.00'):
-            raise ValidationError({'montant': _("Le montant du contrat doit être strictement supérieur à 0.")})
+        # Validation du loyer mensuel
+        if self.loyer_mensuel is not None and self.loyer_mensuel <= Decimal('0.00'):
+            raise ValidationError({'loyer_mensuel': _("Le loyer mensuel doit être strictement supérieur à 0.")})
         if self.date_debut and self.date_fin and self.date_fin < self.date_debut:
             raise ValidationError({'date_fin': _("La date de fin doit être postérieure à la date de début.")})
 
     def save(self, *args, **kwargs):
-        if self.date_debut and self.date_fin and self.reservation and self.reservation.bureau:
-            delta = self.date_fin - self.date_debut
-            nombre_jours = max(delta.days, 0)
-            prix_bureau = self.reservation.bureau.prix or Decimal('0.00')
-            self.montant = Decimal(nombre_jours) * prix_bureau
+        # Calcul automatique du loyer mensuel lors de la sauvegarde
+        if self.reservation and self.reservation.bureau:
+            # Si le prix dans ton modèle Bureau est déjà un prix PAR MOIS :
+            self.loyer_mensuel = self.reservation.bureau.prix or Decimal('0.00')
+            
+            # NOTE alternative : Si le prix du bureau est PAR JOUR et que tu veux estimer un mois (ex: 30 jours) :
+            # prix_journalier = self.reservation.bureau.prix or Decimal('0.00')
+            # self.loyer_mensuel = prix_journalier * Decimal('30')
             
         self.full_clean()
         super().save(*args, **kwargs)
@@ -265,16 +317,101 @@ class Location(models.Model):
         super().save(*args, **kwargs)
 
 
+# class Paiement(models.Model):
+#     class PaiementStatus(models.TextChoices):
+#         PENDING = 'PENDING', _('En attente')
+#         COMPLETED = 'PAID', _('Payé')
+#         FAILED = 'FAILED', _('Échoué') 
+        
+#     id = models.AutoField(primary_key=True)
+#     montant = models.DecimalField(max_digits=14, decimal_places=2)
+#     date = models.DateField(null=True, blank=True)
+#     mode = models.CharField(max_length=20, choices=[('CASH', 'Espèces'), ('CARD', 'Carte bancaire'), ('TRANSFER', 'Virement bancaire')], default='CASH')
+    
+#     # Relations connectées
+#     location = models.ForeignKey(Location, on_delete=models.SET_NULL, related_name='paiements', null=True, blank=True)
+#     client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='paiements')
+#     contrat = models.ForeignKey(Contrat, on_delete=models.CASCADE, related_name='paiements', null=True, blank=True)
+#     statut = models.CharField(max_length=20, choices=PaiementStatus.choices, default=PaiementStatus.PENDING)
+    
+#     created_at = models.DateTimeField(auto_now_add=True)
+#     updated_at = models.DateTimeField(auto_now=True)
+#     is_active = models.BooleanField(default=True)
+    
+#     def __str__(self):
+#         return f"Paiement de {self.montant}€ [{self.get_statut_display()}] - {self.client.user.first_name} {self.client.user.last_name}"
+
+#     # --- SÉCURITÉ DE PAIEMENT BASÉE SUR LES STATUTS TEMPORELS ---
+    
+#     def clean(self):
+#         super().clean()
+#         if self.montant is not None and self.montant <= Decimal('0.00'):
+#             raise ValidationError({'montant': _("Le montant du paiement doit être strictement supérieur à 0.")})
+
+#         # Sécurité : Empêcher d'encaisser de l'argent sur un contrat ou une location EXPIRÉ(E)
+#         if self.contrat and self.contrat.statut_temporel == "EXPIRÉ":
+#             raise ValidationError({'contrat': _("Impossible d'enregistrer un paiement pour un contrat expiré.")})
+            
+#         if self.location and self.location.statut_temporel == "EXPIRÉ":
+#             raise ValidationError({'location': _("Impossible d'enregistrer un paiement pour une location expirée.")})
+
+#     def save(self, *args, **kwargs):
+#         # Récupérer l'utilisateur qui fait l'action (passé depuis la vue)
+#         user_performing_action = kwargs.pop('user', None)
+
+#         if user_performing_action and hasattr(user_performing_action, 'client_profile'):
+#             role_utilisateur = user_performing_action.client_profile.role
+            
+#             # --- APPLICATION DE LA PROPOSITION 2 ---
+#             # Si le montant dépasse 100 000 CFA et que c'est un travailleur qui tente de valider directement en 'PAID'
+#             if self.montant > Decimal('100000.00') and role_utilisateur in ['AGENT', 'TRAVAILLEUR', 'MANAGER'] and self.statut == 'PAID':
+#                 # On force le statut en attente de l'administrateur
+#                 self.statut = self.PaiementStatus.PENDING_ADMIN
+#         self.full_clean()  
+#         super().save(*args, **kwargs)
+
+#     @property
+#     def reste_a_payer(self):
+#         if not self.contrat:
+#             return Decimal('0.00')
+
+#         paiements_valides = self.contrat.paiements.filter(statut='PAID') 
+#         if self.pk:
+#             paiements_valides = paiements_valides.exclude(pk=self.pk)
+
+#         total_deja_paye = sum(p.montant for p in paiements_valides)
+#         if self.statut == 'PAID':
+#             total_deja_paye += self.montant
+
+#         reste = self.contrat.montant - Decimal(str(total_deja_paye))
+#         return max(reste, Decimal('0.00'))
+
+from django.db import models
+from django.core.exceptions import ValidationError
+from django.utils.translation import gettext_lazy as _
+from decimal import Decimal
+
 class Paiement(models.Model):
     class PaiementStatus(models.TextChoices):
         PENDING = 'PENDING', _('En attente')
+        PENDING_ADMIN = 'PENDING_ADMIN', _('En attente validation Admin')  # Ajouté car utilisé dans ton save()
         COMPLETED = 'PAID', _('Payé')
         FAILED = 'FAILED', _('Échoué') 
+
+    CHOIX_MOIS = [
+        (1, 'Janvier'), (2, 'Février'), (3, 'Mars'), (4, 'Avril'),
+        (5, 'Mai'), (6, 'Juin'), (7, 'Juillet'), (8, 'Août'),
+        (9, 'Septembre'), (10, 'Octobre'), (11, 'Novembre'), (12, 'Décembre')
+    ]
         
     id = models.AutoField(primary_key=True)
-    montant = models.DecimalField(max_digits=14, decimal_places=2)
-    date = models.DateField(null=True, blank=True)
+    montant = models.DecimalField(max_digits=14, decimal_places=2, help_text="Montant versé pour ce mois")
+    date = models.DateField(null=True, blank=True, help_text="Date d'encaissement")
     mode = models.CharField(max_length=20, choices=[('CASH', 'Espèces'), ('CARD', 'Carte bancaire'), ('TRANSFER', 'Virement bancaire')], default='CASH')
+    
+    # --- AJOUTS POUR LA GESTION PAR MOIS ---
+    mois_paye = models.IntegerField(choices=CHOIX_MOIS, null=True, blank=False)
+    annee_paye = models.IntegerField(default=2026, null=True, blank=False)
     
     # Relations connectées
     location = models.ForeignKey(Location, on_delete=models.SET_NULL, related_name='paiements', null=True, blank=True)
@@ -286,11 +423,15 @@ class Paiement(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField(default=True)
     
+    class Meta:
+        # Sécurité : un même contrat ne peut pas recevoir 2 paiements validés pour le même mois de la même année
+        unique_together = ('contrat', 'mois_paye', 'annee_paye')
+
     def __str__(self):
-        return f"Paiement de {self.montant}€ [{self.get_statut_display()}] - {self.client.user.first_name} {self.client.user.last_name}"
+        mois_str = self.get_mois_paye_display() if self.mois_paye else "Inconnu"
+        return f"Paiement {mois_str} {self.annee_paye} ({self.montant} CFA) - {self.client.user.first_name}"
 
     # --- SÉCURITÉ DE PAIEMENT BASÉE SUR LES STATUTS TEMPORELS ---
-    
     def clean(self):
         super().clean()
         if self.montant is not None and self.montant <= Decimal('0.00'):
@@ -311,25 +452,129 @@ class Paiement(models.Model):
             role_utilisateur = user_performing_action.client_profile.role
             
             # --- APPLICATION DE LA PROPOSITION 2 ---
-            # Si le montant dépasse 100 000 CFA et que c'est un travailleur qui tente de valider directement en 'PAID'
             if self.montant > Decimal('100000.00') and role_utilisateur in ['AGENT', 'TRAVAILLEUR', 'MANAGER'] and self.statut == 'PAID':
                 # On force le statut en attente de l'administrateur
                 self.statut = self.PaiementStatus.PENDING_ADMIN
+                
         self.full_clean()  
         super().save(*args, **kwargs)
 
+    # --- CALCUL MENSUEL DU RESTE À PAYER ---
+    # @property
+    # def reste_a_payer(self):
+    #     """ Calcule combien il reste à payer pour CE MOIS SPÉCIFIQUE du contrat """
+    #     if not self.contrat or not self.contrat.loyer_mensuel:
+    #         return Decimal('0.00')
+
+    #     # Trouver tous les paiements déjà validés pour le même mois et la même année
+    #     autres_paiements = self.contrat.paiements.filter(
+    #         statut='PAID',
+    #         mois_paye=self.mois_paye,
+    #         annee_paye=self.annee_paye
+    #     )
+        
+    #     # Si on est en train de modifier un paiement existant, on l'exclut du total temporairement
+    #     if self.pk:
+    #         autres_paiements =autres_paiements.exclude(pk=self.pk)
+
+    #     total_deja_paye_ce_mois = sum(p.montant for p in autres_paiements)
+        
+    #     # Si le paiement actuel est déjà validé, on l'ajoute
+    #     if self.statut == 'PAID':
+    #         total_deja_paye_ce_mois += self.montant
+
+    #     # Reste = Loyer Mensuel prévu - Ce qui a déjà été payé ce mois-ci
+    #     reste = self.contrat.loyer_mensuel - total_deja_paye_ce_mois
+    #     return max(reste, Decimal('0.00'))
+    # @property
+    # def loyer_mensuel_prevu_30_jours(self):
+    #     """ Calcule le loyer prévu : Prix journalier (ou de base) * 30 jours """
+    #     if not self.contrat:
+    #         return Decimal('0.00')
+            
+    #     # Si ton modèle Contrat a un prix par jour ou un montant de base, on le multiplie par 30
+    #     # Exemple si tu as un champ 'prix_journalier' ou 'loyer_mensuel' de base :
+    #     if hasattr(self.contrat, 'loyer_mensuel') and self.contrat.loyer_mensuel:
+    #         # Si 'loyer_mensuel' est déjà le prix pour 30 jours, on le retourne directement
+    #         return self.contrat.loyer_mensuel
+            
+    #     # Si c'est basé sur un prix par jour (ex: prix_journalier * 30) :
+    #     # return self.contrat.prix_journalier * 30
+    #     return Decimal('0.00')
+
+    # @property
+    # def reste_a_payer(self):
+    #     """ Calcule le reste à payer sur le montant prévu pour ce mois """
+    #     # 1. On récupère la base attendue pour 30 jours
+    #     loyer_attendu = self.loyer_mensuel_prevu_30_jours
+    #     if loyer_attendu == Decimal('0.00'):
+    #         return Decimal('0.00')
+
+    #     # 2. On cherche les autres paiements déjà effectués par ce client pour le MÊME mois et la MÊME année
+    #     autres_paiements = Paiement.objects.filter(
+    #         contrat=self.contrat,
+    #         statut='PAID',
+    #         mois_paye=self.mois_paye,
+    #         annee_paye=self.annee_paye
+    #     )
+        
+    #     if self.pk:
+    #         autres_paiements = autres_paiements.exclude(pk=self.pk)
+
+    #     # 3. Somme de ce qui a déjà été payé pour ce mois spécifique
+    #     total_deja_paye_ce_mois = sum(p.montant for p in autres_paiements)
+        
+    #     # On inclut le montant actuel si le statut est validé
+    #     if self.statut == 'PAID':
+    #         total_deja_paye_ce_mois += self.montant
+
+    #     # 4. Le reste = Le loyer des 30 jours - tout ce qui a été payé ce mois-ci
+    #     reste = loyer_attendu - total_deja_paye_ce_mois
+    #     return max(reste, Decimal('0.00'))
+    @property
+    def loyer_mensuel_prevu_30_jours(self):
+        """ Va chercher le prix du bureau et fait : prix * 30 jours """
+        # On essaie d'abord via la location liée au paiement, sinon via le contrat
+        bureau = None
+        if self.location and hasattr(self.location, 'bureau'):
+            bureau = self.location.bureau
+        elif self.contrat and hasattr(self.contrat, 'bureau'):
+            bureau = self.contrat.bureau
+        elif self.contrat and hasattr(self.contrat, 'location') and self.contrat.location:
+            bureau = self.contrat.location.bureau
+
+        # Si on a trouvé le bureau, on prend son prix * 30
+        if bureau and hasattr(bureau, 'prix') and bureau.prix:
+            return bureau.prix * 30
+            
+        # Si ton champ dans le modèle Bureau s'appelle 'loyer' ou 'prix_journalier', remplace .prix ci-dessus
+        return Decimal('0.00')
+
     @property
     def reste_a_payer(self):
-        if not self.contrat:
+        """ Calcule le reste sur les 7 500 000 CFA (ou autre) attendus ce mois-ci """
+        loyer_attendu = self.loyer_mensuel_prevu_30_jours
+        if loyer_attendu == Decimal('0.00'):
             return Decimal('0.00')
 
-        paiements_valides = self.contrat.paiements.filter(statut='PAID') 
+        # On fait la somme de ce que le client a versé CE MOIS-CI pour ce contrat
+        autres_paiements = Paiement.objects.filter(
+            contrat=self.contrat,
+            statut='PAID',
+            mois_paye=self.mois_paye,
+            annee_paye=self.annee_paye
+        )
+        
         if self.pk:
-            paiements_valides = paiements_valides.exclude(pk=self.pk)
+            autres_paiements = autres_paiements.exclude(pk=self.pk)
 
-        total_deja_paye = sum(p.montant for p in paiements_valides)
+        total_deja_paye_ce_mois = sum(p.montant for p in autres_paiements)
+        
+        # On ajoute le montant de ce paiement-ci s'il est validé
         if self.statut == 'PAID':
-            total_deja_paye += self.montant
+            total_deja_paye_ce_mois += self.montant
 
-        reste = self.contrat.montant - Decimal(str(total_deja_paye))
+        # Le reste = (Prix Bureau * 30) - Ce qui a été payé ce mois-ci
+        reste = loyer_attendu - total_deja_paye_ce_mois
         return max(reste, Decimal('0.00'))
+    
