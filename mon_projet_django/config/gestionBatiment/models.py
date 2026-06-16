@@ -459,78 +459,7 @@ class Paiement(models.Model):
         self.full_clean()  
         super().save(*args, **kwargs)
 
-    # --- CALCUL MENSUEL DU RESTE À PAYER ---
-    # @property
-    # def reste_a_payer(self):
-    #     """ Calcule combien il reste à payer pour CE MOIS SPÉCIFIQUE du contrat """
-    #     if not self.contrat or not self.contrat.loyer_mensuel:
-    #         return Decimal('0.00')
-
-    #     # Trouver tous les paiements déjà validés pour le même mois et la même année
-    #     autres_paiements = self.contrat.paiements.filter(
-    #         statut='PAID',
-    #         mois_paye=self.mois_paye,
-    #         annee_paye=self.annee_paye
-    #     )
-        
-    #     # Si on est en train de modifier un paiement existant, on l'exclut du total temporairement
-    #     if self.pk:
-    #         autres_paiements =autres_paiements.exclude(pk=self.pk)
-
-    #     total_deja_paye_ce_mois = sum(p.montant for p in autres_paiements)
-        
-    #     # Si le paiement actuel est déjà validé, on l'ajoute
-    #     if self.statut == 'PAID':
-    #         total_deja_paye_ce_mois += self.montant
-
-    #     # Reste = Loyer Mensuel prévu - Ce qui a déjà été payé ce mois-ci
-    #     reste = self.contrat.loyer_mensuel - total_deja_paye_ce_mois
-    #     return max(reste, Decimal('0.00'))
-    # @property
-    # def loyer_mensuel_prevu_30_jours(self):
-    #     """ Calcule le loyer prévu : Prix journalier (ou de base) * 30 jours """
-    #     if not self.contrat:
-    #         return Decimal('0.00')
-            
-    #     # Si ton modèle Contrat a un prix par jour ou un montant de base, on le multiplie par 30
-    #     # Exemple si tu as un champ 'prix_journalier' ou 'loyer_mensuel' de base :
-    #     if hasattr(self.contrat, 'loyer_mensuel') and self.contrat.loyer_mensuel:
-    #         # Si 'loyer_mensuel' est déjà le prix pour 30 jours, on le retourne directement
-    #         return self.contrat.loyer_mensuel
-            
-    #     # Si c'est basé sur un prix par jour (ex: prix_journalier * 30) :
-    #     # return self.contrat.prix_journalier * 30
-    #     return Decimal('0.00')
-
-    # @property
-    # def reste_a_payer(self):
-    #     """ Calcule le reste à payer sur le montant prévu pour ce mois """
-    #     # 1. On récupère la base attendue pour 30 jours
-    #     loyer_attendu = self.loyer_mensuel_prevu_30_jours
-    #     if loyer_attendu == Decimal('0.00'):
-    #         return Decimal('0.00')
-
-    #     # 2. On cherche les autres paiements déjà effectués par ce client pour le MÊME mois et la MÊME année
-    #     autres_paiements = Paiement.objects.filter(
-    #         contrat=self.contrat,
-    #         statut='PAID',
-    #         mois_paye=self.mois_paye,
-    #         annee_paye=self.annee_paye
-    #     )
-        
-    #     if self.pk:
-    #         autres_paiements = autres_paiements.exclude(pk=self.pk)
-
-    #     # 3. Somme de ce qui a déjà été payé pour ce mois spécifique
-    #     total_deja_paye_ce_mois = sum(p.montant for p in autres_paiements)
-        
-    #     # On inclut le montant actuel si le statut est validé
-    #     if self.statut == 'PAID':
-    #         total_deja_paye_ce_mois += self.montant
-
-    #     # 4. Le reste = Le loyer des 30 jours - tout ce qui a été payé ce mois-ci
-    #     reste = loyer_attendu - total_deja_paye_ce_mois
-    #     return max(reste, Decimal('0.00'))
+   
     @property
     def loyer_mensuel_prevu_30_jours(self):
         """ Va chercher le prix du bureau et fait : prix * 30 jours """
