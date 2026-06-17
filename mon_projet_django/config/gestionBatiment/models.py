@@ -183,51 +183,6 @@ class Reservation(models.Model):
         self.full_clean()  
         super().save(*args, **kwargs)
         
-        
-#class Contrat(models.Model):
-    # id = models.AutoField(primary_key=True)
-    # reservation = models.OneToOneField(Reservation, on_delete=models.CASCADE, related_name='contrat')
-    # client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='contrats')
-    # date_debut = models.DateField(null=True, blank=True)
-    # date_fin = models.DateField(null=True, blank=True)
-    # montant = models.DecimalField(max_digits=14, decimal_places=2, blank=True, null=True)
-    # description = models.TextField(blank=True, null=True)
-    # created_at = models.DateTimeField(auto_now_add=True)
-    # updated_at = models.DateTimeField(auto_now=True)
-    # is_active = models.BooleanField(default=True)
-
-    # def __str__(self):
-    #     return f"Contrat du {self.date_debut} au {self.date_fin} - {self.client.user.first_name} {self.client.user.last_name}"
-    
-    # # --- STATUT TEMPOREL DYNAMIQUE ---
-    # @property
-    # def statut_temporel(self):
-    #     aujourdhui = timezone.now().date()
-    #     if self.date_debut and aujourdhui < self.date_debut:
-    #         return "À VENIR"
-    #     elif self.date_debut and self.date_fin and self.date_debut <= aujourdhui <= self.date_fin:
-    #         return "EN COURS"
-    #     elif self.date_fin and aujourdhui > self.date_fin:
-    #         return "EXPIRÉ"
-    #     return "INCONNU"
-
-    # def clean(self):
-    #     super().clean()
-    #     if self.montant is not None and self.montant <= Decimal('0.00'):
-    #         raise ValidationError({'montant': _("Le montant du contrat doit être strictement supérieur à 0.")})
-    #     if self.date_debut and self.date_fin and self.date_fin < self.date_debut:
-    #         raise ValidationError({'date_fin': _("La date de fin doit être postérieure à la date de début.")})
-
-    # def save(self, *args, **kwargs):
-    #     if self.date_debut and self.date_fin and self.reservation and self.reservation.bureau:
-    #         delta = self.date_fin - self.date_debut
-    #         nombre_jours = max(delta.days, 0)
-    #         prix_bureau = self.reservation.bureau.prix or Decimal('0.00')
-    #         self.montant = Decimal(nombre_jours) * prix_bureau
-            
-    #     self.full_clean()
-    #     super().save(*args, **kwargs)
-
 class Contrat(models.Model):
     id = models.AutoField(primary_key=True)
     reservation = models.OneToOneField(Reservation, on_delete=models.CASCADE, related_name='contrat')
@@ -316,80 +271,6 @@ class Location(models.Model):
         self.full_clean()
         super().save(*args, **kwargs)
 
-
-# class Paiement(models.Model):
-#     class PaiementStatus(models.TextChoices):
-#         PENDING = 'PENDING', _('En attente')
-#         COMPLETED = 'PAID', _('Payé')
-#         FAILED = 'FAILED', _('Échoué') 
-        
-#     id = models.AutoField(primary_key=True)
-#     montant = models.DecimalField(max_digits=14, decimal_places=2)
-#     date = models.DateField(null=True, blank=True)
-#     mode = models.CharField(max_length=20, choices=[('CASH', 'Espèces'), ('CARD', 'Carte bancaire'), ('TRANSFER', 'Virement bancaire')], default='CASH')
-    
-#     # Relations connectées
-#     location = models.ForeignKey(Location, on_delete=models.SET_NULL, related_name='paiements', null=True, blank=True)
-#     client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='paiements')
-#     contrat = models.ForeignKey(Contrat, on_delete=models.CASCADE, related_name='paiements', null=True, blank=True)
-#     statut = models.CharField(max_length=20, choices=PaiementStatus.choices, default=PaiementStatus.PENDING)
-    
-#     created_at = models.DateTimeField(auto_now_add=True)
-#     updated_at = models.DateTimeField(auto_now=True)
-#     is_active = models.BooleanField(default=True)
-    
-#     def __str__(self):
-#         return f"Paiement de {self.montant}€ [{self.get_statut_display()}] - {self.client.user.first_name} {self.client.user.last_name}"
-
-#     # --- SÉCURITÉ DE PAIEMENT BASÉE SUR LES STATUTS TEMPORELS ---
-    
-#     def clean(self):
-#         super().clean()
-#         if self.montant is not None and self.montant <= Decimal('0.00'):
-#             raise ValidationError({'montant': _("Le montant du paiement doit être strictement supérieur à 0.")})
-
-#         # Sécurité : Empêcher d'encaisser de l'argent sur un contrat ou une location EXPIRÉ(E)
-#         if self.contrat and self.contrat.statut_temporel == "EXPIRÉ":
-#             raise ValidationError({'contrat': _("Impossible d'enregistrer un paiement pour un contrat expiré.")})
-            
-#         if self.location and self.location.statut_temporel == "EXPIRÉ":
-#             raise ValidationError({'location': _("Impossible d'enregistrer un paiement pour une location expirée.")})
-
-#     def save(self, *args, **kwargs):
-#         # Récupérer l'utilisateur qui fait l'action (passé depuis la vue)
-#         user_performing_action = kwargs.pop('user', None)
-
-#         if user_performing_action and hasattr(user_performing_action, 'client_profile'):
-#             role_utilisateur = user_performing_action.client_profile.role
-            
-#             # --- APPLICATION DE LA PROPOSITION 2 ---
-#             # Si le montant dépasse 100 000 CFA et que c'est un travailleur qui tente de valider directement en 'PAID'
-#             if self.montant > Decimal('100000.00') and role_utilisateur in ['AGENT', 'TRAVAILLEUR', 'MANAGER'] and self.statut == 'PAID':
-#                 # On force le statut en attente de l'administrateur
-#                 self.statut = self.PaiementStatus.PENDING_ADMIN
-#         self.full_clean()  
-#         super().save(*args, **kwargs)
-
-#     @property
-#     def reste_a_payer(self):
-#         if not self.contrat:
-#             return Decimal('0.00')
-
-#         paiements_valides = self.contrat.paiements.filter(statut='PAID') 
-#         if self.pk:
-#             paiements_valides = paiements_valides.exclude(pk=self.pk)
-
-#         total_deja_paye = sum(p.montant for p in paiements_valides)
-#         if self.statut == 'PAID':
-#             total_deja_paye += self.montant
-
-#         reste = self.contrat.montant - Decimal(str(total_deja_paye))
-#         return max(reste, Decimal('0.00'))
-
-from django.db import models
-from django.core.exceptions import ValidationError
-from django.utils.translation import gettext_lazy as _
-from decimal import Decimal
 
 class Paiement(models.Model):
     class PaiementStatus(models.TextChoices):
