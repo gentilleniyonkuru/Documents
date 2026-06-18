@@ -46,48 +46,48 @@ class ClientPermission(BaseRolePermission):
     """
     
     def has_permission(self, request, view):
+        # 1. Permettre l'accès à l'action 'inscription' (Anonyme ou Connecté sans profil)
+        if getattr(view, 'action', None) == 'inscription':
+            return True
+            
+        # Pour toutes les autres actions, il faut impérativement être connecté
         if not request.user or not request.user.is_authenticated:
             return False
-        
+            
         role = self.get_user_role(request)
         
+        # Les administrateurs et travailleurs ont les accès généraux
+        if role == ADMIN_ROLE or role in WORKER_ROLES:
+            return True
+            
+        if role in CLIENT_ROLES:
+            # Un client peut lire (GET) ou modifier (PUT/PATCH)
+            # Mais on lui interdit le POST standard (pour ne pas créer un DEUXIÈME client)
+            return request.method in ('GET', 'HEAD', 'OPTIONS', 'PATCH', 'PUT')
+            
+        return False
+
+    def has_object_permission(self, request, view, obj):
+        if getattr(view, 'action', None) == 'inscription':
+            return True
+            
+        if not request.user or not request.user.is_authenticated:
+            return False
+            
+        role = self.get_user_role(request)
+
         if role == ADMIN_ROLE:
             return True
-        
+            
         if role in WORKER_ROLES:
-            # Les travailleurs peuvent voir tous les clients (GET)
-            # Mais ne peuvent pas créer/modifier/supprimer
             return request.method in SAFE_METHODS
-        
+            
         if role in CLIENT_ROLES:
-            # Les clients peuvent GET et POST (créer leur propre profil)
-            # et PATCH/PUT (modifier leur propre profil)
-            return request.method in ('GET', 'HEAD', 'OPTIONS', 'POST', 'PATCH', 'PUT')
-        
+            # SÉCURITÉ : Il ne peut interagir que si le profil lui appartient
+            return obj.user == request.user
+            
         return False
     
-    def has_object_permission(self, request, view, obj):
-        if not request.user or not request.user.is_authenticated:
-            return False
-        
-        role = self.get_user_role(request)
-        
-        if role == ADMIN_ROLE:
-            return True
-        
-        if role in WORKER_ROLES:
-            # Les travailleurs peuvent seulement lire (GET)
-            return request.method in SAFE_METHODS
-        
-        if role in CLIENT_ROLES:
-            # Les clients ne peuvent accéder que à leur propre profil
-            user_client = getattr(request.user, 'client_profile', None)
-            if user_client and obj.id == user_client.id:
-                return request.method in ('GET', 'HEAD', 'OPTIONS', 'PATCH', 'PUT')
-        
-        return False
-
-
 class BatimentPermission(BaseRolePermission):
     """
     Permissions pour BatimentViewSet:
@@ -101,7 +101,7 @@ class BatimentPermission(BaseRolePermission):
             return False
         
         role = self.get_user_role(request)
-        
+
         if role == ADMIN_ROLE:
             return True
         
@@ -115,7 +115,7 @@ class BatimentPermission(BaseRolePermission):
             return False
         
         role = self.get_user_role(request)
-        
+
         if role == ADMIN_ROLE:
             return True
         
@@ -138,7 +138,7 @@ class NiveauPermission(BaseRolePermission):
             return False
         
         role = self.get_user_role(request)
-        
+
         if role == ADMIN_ROLE:
             return True
         
@@ -306,16 +306,14 @@ class ContratPermission(BaseRolePermission):
             return False
         
         role = self.get_user_role(request)
-        
+
         if role == ADMIN_ROLE:
             return True
         
         if role in WORKER_ROLES:
-            # Peuvent lire tous les contrats et créer
             return request.method in ('GET', 'HEAD', 'OPTIONS', 'POST')
         
         if role in CLIENT_ROLES:
-            # Peuvent créer et lire leurs propres contrats
             return request.method in ('GET', 'HEAD', 'OPTIONS', 'POST', 'PATCH', 'PUT')
         
         return False
@@ -325,16 +323,14 @@ class ContratPermission(BaseRolePermission):
             return False
         
         role = self.get_user_role(request)
-        
+
         if role == ADMIN_ROLE:
             return True
         
         if role in WORKER_ROLES:
-            # Peuvent lire tous les contrats
             return request.method in SAFE_METHODS
         
         if role in CLIENT_ROLES:
-            # Peuvent modifier seulement leurs propres contrats
             user_client = getattr(request.user, 'client_profile', None)
             if user_client and obj.client.id == user_client.id:
                 return request.method in ('GET', 'HEAD', 'OPTIONS', 'PATCH', 'PUT')
@@ -387,23 +383,40 @@ class PaiementPermission(BaseRolePermission):
     - CLIENT: peuvent voir leurs propres paiements
     """
     
+    #def has_permission(self, request, view):
+        #if not request.user or not request.user.is_authenticated:
+         #   return False
+        
+        ###if role in WORKER_ROLES:
+            # Peuvent lire et créer, mais pas modifier/supprimer
+            #return request.method in ('GET', 'HEAD', 'OPTIONS', 'POST')
+        
+        #if role in CLIENT_ROLES:
+            # Peuvent voir leurs paiements
+           # return request.method in SAFE_METHODS
+        
+        #return False
+    
     def has_permission(self, request, view):
+        # 1. Si c'est l'action d'auto-inscription, on laisse passer (Anonyme ou futur client)
+        if view.action == 'inscription':
+            return True
+
+        # 2. Si l'utilisateur n'est pas connecté, on bloque
         if not request.user or not request.user.is_authenticated:
             return False
-        
+    
         role = self.get_user_role(request)
-        
+
         if role == ADMIN_ROLE:
             return True
-        
+    
         if role in WORKER_ROLES:
-            # Peuvent lire et créer, mais pas modifier/supprimer
             return request.method in ('GET', 'HEAD', 'OPTIONS', 'POST')
-        
+    
         if role in CLIENT_ROLES:
-            # Peuvent voir leurs paiements
-            return request.method in SAFE_METHODS
-        
+            return request.method in ('GET', 'HEAD', 'OPTIONS', 'PATCH', 'PUT')
+    
         return False
     
     def has_object_permission(self, request, view, obj):
@@ -411,7 +424,7 @@ class PaiementPermission(BaseRolePermission):
             return False
         
         role = self.get_user_role(request)
-        
+
         if role == ADMIN_ROLE:
             return True
         
@@ -419,9 +432,8 @@ class PaiementPermission(BaseRolePermission):
             return request.method in SAFE_METHODS
         
         if role in CLIENT_ROLES:
-            # Peuvent voir seulement leurs propres paiements
             user_client = getattr(request.user, 'client_profile', None)
-            if user_client and hasattr(obj, 'contrat') and obj.contrat.client.id == user_client.id:
+            if user_client and obj.client_id and obj.client_id == user_client.id:
                 return request.method in SAFE_METHODS
         
         return False

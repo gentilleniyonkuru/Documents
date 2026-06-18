@@ -1,21 +1,40 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User 
+from django.db import transaction
 from .models import Client, Batiment, Niveau,  TypeBureau, Bureau, Reservation,  Contrat, Location, Paiement
 
 
 
+class UserDetailSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'first_name', 'last_name', 'email']
+
+
+class ClientDetailSerializer(serializers.ModelSerializer):
+    user = UserDetailSerializer(read_only=True)
+    telephone = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Client
+        fields = ['id', 'user', 'telephone', 'addresse', 'date_naissance']
+
+    def get_telephone(self, obj):
+        return str(obj.telephone) if obj.telephone else None
+
+
+# --- SÉRIALISEURS PRINCIPAUX ---
 
 class ClientSerializer(serializers.ModelSerializer):
-    # Lecture (Affichage lors d'un GET)
     user_detail = serializers.SerializerMethodField(read_only=True)
     user_id = serializers.IntegerField(source='user.id', read_only=True)
 
-    # Écriture (Champs requis pour l'inscription POST)
-    username = serializers.CharField(write_only=True, required=True, max_length=150)
-    password = serializers.CharField(write_only=True, required=True)
-    email = serializers.EmailField(write_only=True, required=True)
-    first_name = serializers.CharField(write_only=True, required=True, max_length=150)
-    last_name = serializers.CharField(write_only=True, required=True, max_length=150)
+    # CORRECTION : required=False pour permettre les mises à jour partielles (PATCH)
+    username = serializers.CharField(write_only=True, required=False, max_length=150)
+    password = serializers.CharField(write_only=True, required=False)
+    email = serializers.EmailField(write_only=True, required=False)
+    first_name = serializers.CharField(write_only=True, required=False, max_length=150)
+    last_name = serializers.CharField(write_only=True, required=False, max_length=150)
 
     class Meta:
         model = Client
@@ -26,45 +45,62 @@ class ClientSerializer(serializers.ModelSerializer):
         ]
 
     def get_user_detail(self, obj):
-        return {
-            "username": obj.user.username,
-            "email": obj.user.email,
-            "first_name": obj.user.first_name,
-            "last_name": obj.user.last_name
-        }
+        return UserDetailSerializer(obj.user).data
 
     def validate_username(self, value):
-        if User.objects.filter(username=value).exists():
+        # CORRECTION : Ne pas s'auto-bloquer lors d'une modification
+        query = User.objects.filter(username=value)
+        if self.instance and self.instance.user:
+            query = query.exclude(pk=self.instance.user.id)
+        if query.exists():
             raise serializers.ValidationError("Ce nom d'utilisateur est déjà pris.")
         return value
 
     def create(self, validated_data):
-        # 1. Extraction des données du User
-        username = validated_data.pop('username')
-        password = validated_data.pop('password')
-        email = validated_data.pop('email')
-        first_name = validated_data.pop('first_name')
-        last_name = validated_data.pop('last_name')
+        with transaction.atomic():
+            username = validated_data.pop('username')
+            password = validated_data.pop('password')
+            email = validated_data.pop('email', '')
+            first_name = validated_data.pop('first_name', '')
+            last_name = validated_data.pop('last_name', '')
 
-        # 2. Creation sécurisée du User
-        user = User.objects.create(
-            username=username,
-            email=email,
-            first_name=first_name,
-            last_name=last_name
-        )
-        user.set_password(password)
-        user.save()
+            user, created = User.objects.get_or_create(
+                username=username,
+                defaults={'email': email, 'first_name': first_name, 'last_name': last_name},
+            )
+            if not created:
+                user.email = email or user.email
+                user.first_name = first_name or user.first_name
+                user.last_name = last_name or user.last_name
+                user.save()
+            user.set_password(password)
+            user.save()
 
-        # 3. Creation automatique du Client avec le meme ID
-        client = Client.objects.create(
-            user=user,
-            role=Client.UserRole.CLIENT,
-            telephone=validated_data.get('telephone'),
-            addresse=validated_data.get('addresse'),
-            date_naissance=validated_data.get('date_naissance')
-        )
-        return client
+            client = Client.objects.create(user=user, role=Client.UserRole.CLIENT, **validated_data)
+            return client
+
+    def update(self, instance, validated_data):
+        # AJOUT CRITIQUE : Permet de modifier aussi les infos de l'User lié
+        user_data = {}
+        for field in ['username', 'email', 'first_name', 'last_name']:
+            if field in validated_data:
+                user_data[field] = validated_data.pop(field)
+        
+        password = validated_data.pop('password', None)
+
+        with transaction.atomic():
+            # 1. Mise à jour de l'User
+            if user_data or password:
+                user = instance.user
+                for attr, value in user_data.items():
+                    setattr(user, attr, value)
+                if password:
+                    user.set_password(password)
+                user.save()
+
+            # 2. Mise à jour du Client
+            return super().update(instance, validated_data)
+
 
 class BatimentSerializer(serializers.ModelSerializer):
     class Meta:
@@ -105,7 +141,8 @@ class BureauSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Bureau
-        fields = ['id', 'numero', 'type', 'type_detail', 'unite', 'espace', 'prix', 'batiment', 'batiment_detail', 'niveau', 'niveau_detail', 'created_at', 'updated_at', 'is_active']
+        fields = ['id', 'numero', 'type', 'type_detail', 'unite', 'espace', 'prix', 'batiment', 'batiment_detail', 'niveau', 'niveau_detail', 'statut', 'created_at', 'updated_at', 'is_active']
+        read_only_fields = ['prix', 'statut']
 
     def get_type_detail(self, obj):
         if obj.type:
@@ -136,15 +173,103 @@ class BureauSerializer(serializers.ModelSerializer):
             }
         return None
 
+    def create(self, validated_data):
+        user = validated_data.pop('user', None)
+        bureau = Bureau(**validated_data)
+        bureau.save(user=user)
+        return bureau
+
+    def update(self, instance, validated_data):
+        user = validated_data.pop('user', None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save(user=user)
+        return instance
+
 class ContratSerializer(serializers.ModelSerializer):
+    montant = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    created_by = UserDetailSerializer(read_only=True)
     created_at = serializers.DateTimeField(read_only=True)
     updated_at = serializers.DateTimeField(read_only=True)
     is_active = serializers.BooleanField(default=True)
+    
     class Meta:
         model = Contrat
-        fields = ['id', 'reservation', 'client', 'date_debut', 'date_fin', 'montant', 'description', 'created_at', 'updated_at', 'is_active']
-       
+        fields = [
+            'id', 'reservation', 'client', 'date_debut', 'date_fin',
+            'type_facturation', 'montant', 'description', 'created_by', 'created_at', 'updated_at', 'is_active'
+        ]
+        read_only_fields = ['statut_approbation', 'created_by', 'created_at', 'updated_at', 'is_active']
+
+    def create(self, validated_data):
+        user = validated_data.pop('user', None)
+        contrat = Contrat(**validated_data)
+        contrat.save(user=user)
+        return contrat
+
+    def update(self, instance, validated_data):
+        user = validated_data.pop('user', None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save(user=user)
+        return instance
         
+
+
+class ReservationSerializer(serializers.ModelSerializer):
+    client_detail = serializers.SerializerMethodField(read_only=True)
+    bureau_detail = serializers.SerializerMethodField(read_only=True)
+    created_at = serializers.DateTimeField(read_only=True)
+    updated_at = serializers.DateTimeField(read_only=True)
+    is_active = serializers.BooleanField(default=True)
+
+    class Meta:
+        model = Reservation
+        fields = ['id', 'date_debut', 'date_fin', 'bureau', 'client', 'client_detail', 'bureau_detail', 'created_at', 'updated_at', 'is_active']
+
+    def get_client_detail(self, obj):
+        if obj.client:
+            return {
+                'id': obj.client.id,
+                'user': {
+                    'id': obj.client.user.id,
+                    'username': obj.client.user.username,
+                    'first_name': obj.client.user.first_name,
+                    'last_name': obj.client.user.last_name,
+                    'email': obj.client.user.email,
+                },
+                'telephone': str(obj.client.telephone) if obj.client.telephone else None,
+                'addresse': obj.client.addresse,
+                'date_naissance': obj.client.date_naissance,
+            }
+        return None
+    #Fonction pour masque le champ client aux Clients connecte mais permettre les admins de voir les champs
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        request = self.context.get('request')
+        if request and request.user and request.user.is_authenticated:
+            # 1. On vérifie s'il y a un profil attaché
+            if hasattr(request.user, 'client_profile') and request.user.client_profile:
+                profile = request.user.client_profile
+                
+                # 2. CORRECTION : On bloque en lecture seule UNIQUEMENT si son rôle est strictement 'CLIENT'
+                if profile.role == 'CLIENT':
+                    self.fields['client'].read_only = True
+
+    def get_bureau_detail(self, obj):
+        if obj.bureau:
+            return {
+                'id': obj.bureau.id,
+                'numero': obj.bureau.numero,
+                'batiment': obj.bureau.batiment.nom if obj.bureau.batiment else None,
+                'niveau': obj.bureau.niveau.nom if obj.bureau.niveau else None,
+                'prix': str(obj.bureau.prix) if obj.bureau.prix else None,
+                'statut': obj.bureau.statut,
+            }
+        return None
+
+
 class LocationSerializer(serializers.ModelSerializer):
     client_detail = serializers.SerializerMethodField(read_only=True)
     created_at = serializers.DateTimeField(read_only=True)
@@ -153,72 +278,8 @@ class LocationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Location
-        fields = ['id', 'date_debut', 'date_fin', 'bureau', 'client', 'client_detail', 'created_at', 'updated_at', 'is_active']
-       
-       
-    def get_client_detail(self, obj):
-        if obj.client:
-            return {
-                'id': obj.client.id,
-                'user': {
-                    'id': obj.client.user.id,
-                    'username': obj.client.user.username,
-                    'first_name': obj.client.user.first_name,
-                    'last_name': obj.client.user.last_name,
-                    'email': obj.client.user.email,
-                },
-                'telephone': str(obj.client.telephone) if obj.client.telephone else None,
-                'addresse': obj.client.addresse,
-                'date_naissance': obj.client.date_naissance,
-            }
-        return None 
-
-class PaiementSerializer(serializers.ModelSerializer):
-    client_detail = serializers.SerializerMethodField(read_only=True)
-    mode = serializers.ChoiceField(choices=[('CASH', 'Espèces'), ('CARD', 'Carte bancaire'), ('TRANSFER', 'Virement bancaire')], default='CASH')
-    montant = serializers.FloatField()
-    created_at = serializers.DateTimeField(read_only=True)
-    updated_at = serializers.DateTimeField(read_only=True)
-    is_active = serializers.BooleanField(default=True)
-    
-    class Meta:
-        model = Paiement
-        fields = ['id', 'date', 'montant', 'mode', 'location', 'client', 'client_detail', 'contrat', 'statut', 'created_at', 'updated_at', 'is_active']
-
-    def get_client_detail(self, obj):
-        if obj.client:
-            return {
-                'id': obj.client.id,
-                'user': {
-                    'id': obj.client.user.id,
-                    'username': obj.client.user.username,
-                    'first_name': obj.client.user.first_name,
-                    'last_name': obj.client.user.last_name,
-                    'email': obj.client.user.email,
-                },
-                'telephone': str(obj.client.telephone) if obj.client.telephone else None,
-                'addresse': obj.client.addresse,
-                'date_naissance': obj.client.date_naissance,
-            }
-        return None 
-
-class ReservationSerializer(serializers.ModelSerializer):
-    montant_calcule = serializers.SerializerMethodField(read_only=True)
-    client_detail = serializers.SerializerMethodField(read_only=True)
-
-    class Meta:
-        model = Reservation
-        fields = ['id', 'date_debut', 'montant_calcule', 'date_fin', 'bureau', 'client', 'client_detail', 'created_at', 'updated_at', 'is_active']
+        fields = ['id', 'date_debut', 'date_fin', 'bureau','contrat', 'client', 'client_detail', 'created_at', 'updated_at', 'is_active']
         
-
-    def get_montant_calcule(self, obj):
-        if obj.bureau and obj.date_debut and obj.date_fin:
-            delta = obj.date_fin - obj.date_debut
-            nombre_jours = delta.days 
-            montant_total = nombre_jours * float(obj.bureau.prix) / 2
-            return montant_total
-        return 0.0
-    
     def get_client_detail(self, obj):
         if obj.client:
             return {
@@ -236,3 +297,58 @@ class ReservationSerializer(serializers.ModelSerializer):
             }
         return None
 
+
+class PaiementSerializer(serializers.ModelSerializer):
+    client_detail = serializers.SerializerMethodField(read_only=True)
+    created_by = UserDetailSerializer(read_only=True)
+    mode = serializers.ChoiceField(choices=[('CASH', 'Espèces'), ('CARD', 'Carte bancaire'), ('TRANSFER', 'Virement bancaire')], default='CASH')
+    montant = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        required=False,
+        allow_null=True,
+    )
+    created_at = serializers.DateTimeField(read_only=True)
+    updated_at = serializers.DateTimeField(read_only=True)
+    is_active = serializers.BooleanField(default=True)
+    
+    class Meta:
+        model = Paiement
+        fields = [
+            'id', 'date', 'montant', 'mode', 'location', 'client',
+            'client_detail', 'contrat', 'statut',
+            'created_by', 'created_at', 'updated_at', 'is_active'
+        ]
+        read_only_fields = ['created_by', 'statut', 'created_at', 'updated_at', 'is_active']
+
+    def get_client_detail(self, obj):
+        if obj.client:
+            return {
+                'id': obj.client.id,
+                'user': {
+                    'id': obj.client.user.id,
+                    'username': obj.client.user.username,
+                    'first_name': obj.client.user.first_name,
+                    'last_name': obj.client.user.last_name,
+                    'email': obj.client.user.email,
+                },
+                'telephone': str(obj.client.telephone) if obj.client.telephone else None,
+                'addresse': obj.client.addresse,
+                'date_naissance': obj.client.date_naissance,
+            }
+        return None 
+
+    def create(self, validated_data):
+        user = validated_data.pop('user', None)
+        paiement = Paiement(**validated_data)
+        paiement.save(user=user)
+        return paiement
+
+    def update(self, instance, validated_data):
+        user = validated_data.pop('user', None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save(user=user)
+        return instance
+        
+        

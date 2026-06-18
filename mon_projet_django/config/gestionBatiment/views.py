@@ -2,6 +2,7 @@ from django.http import HttpResponse
 from django.shortcuts import render
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
+from datetime import timedelta
 from rest_framework import viewsets, status
 from rest_framework import permissions
 from rest_framework.permissions import AllowAny
@@ -24,6 +25,7 @@ from .permissions import (
     ContratPermission, LocationPermission, PaiementPermission,
     ADMIN_ROLE, WORKER_ROLES, CLIENT_ROLES
 )
+
 
 
 class BaseModelViewSet(viewsets.ModelViewSet):
@@ -55,7 +57,7 @@ class BaseModelViewSet(viewsets.ModelViewSet):
             return super().partial_update(request, *args, **kwargs)
         except DjangoValidationError as e:
             raise ValidationError(self._format_django_validation_error(e))
-
+        
     def get_permissions(self):
         if getattr(self, 'permission_classes', None):
             return [permission() for permission in self.permission_classes]
@@ -66,6 +68,8 @@ class BaseModelViewSet(viewsets.ModelViewSet):
 
     def get_user_role(self):
         user = self.request.user
+        if not user or user.is_anonymous:
+            return None
         if user.is_superuser:
             return ADMIN_ROLE
 
@@ -79,9 +83,10 @@ class BaseModelViewSet(viewsets.ModelViewSet):
         for role in WORKER_ROLES:
             if role in groups:
                 return role
-        if CLIENT_ROLES[0] in groups:
+        if CLIENT_ROLES and CLIENT_ROLES[0] in groups:
             return CLIENT_ROLES[0]
         return None
+
 
 
 # ==================== Vues simples ====================
@@ -102,24 +107,64 @@ def index(request):
 
 # ==================== ViewSets API REST ====================
 
-class ClientViewSet(viewsets.ModelViewSet):
-    """ViewSet pour gérer les Clients"""
-    serializer_class = ClientSerializer
-    ordering = ['user_id']  # Correction de l'erreur OperationalError (no such column: id)
+class ClientViewSet(BaseModelViewSet):
+   """ViewSet pour gérer les Clients"""
+   serializer_class = ClientSerializer
+   permission_classes = [ClientPermission]
+   ordering = ['user_id']
+   
 
-    def get_queryset(self):
-        # On ajoute le order_by('user_id') pour sécuriser toutes les requêtes GET
-        return Client.objects.all().order_by('user_id')
+   def get_queryset(self):
+        role = self.get_user_role()
+        profile = self.get_client_profile()
+        base_query = Client.objects.select_related('user')
 
-    @action(detail=False, methods=['post'], permission_classes=[AllowAny], url_path='inscription')
-    def inscription(self, request):
-        """Action publique permettant au client de s'enregistrer tout seul"""
+        # CORRECTION SÉCURITÉ : Un client ne peut pas lister les autres clients
+        if role == ADMIN_ROLE or role in WORKER_ROLES:
+            return base_query.all().order_by('user_id')
+        if role in CLIENT_ROLES and profile is not None:
+            return base_query.filter(id=profile.id)
+        
+        return Client.objects.none()
+
+   @action(detail=False, methods=['post'], permission_classes=[AllowAny], url_path='inscription')
+   def inscription(self, request):
+       
+        """Permet a un utilisateur (anonyme ou connecté sans profil) de creer SON profil"""
+        # Securite : Si l'utilisateur est connecté et a deja un profil, on bloque
+        
+        if request.user.is_authenticated and self.get_client_profile() is not None:
+            return Response(
+                {"detail": "Vous avez déjà un profil client créé."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
         serializer = self.get_serializer(data=request.data)
         if serializer.is_valid():
-            client = serializer.save()
+            # Si l'utilisateur est connecté, on lui associe automatiquement le profil
+            if request.user.is_authenticated:
+                client = serializer.save(user=request.user)
+            else:
+                client = serializer.save()
             return Response(self.get_serializer(client).data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+   @action(detail=False, methods=['get'], url_path='mon-profil')
+   def mon_profil(self, request):
+        """Point d'accès crucial pour le Frontend pour vérifier l'état du profil"""
+        profile = self.get_client_profile()
+        if profile is None:
+            return Response(
+                {"has_profile": False, "detail": "Aucun profil client trouvé pour cet utilisateur."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = self.get_serializer(profile)
+        data = serializer.data
+        data["has_profile"] = True
+        return Response(data, status=status.HTTP_200_OK)
+    
+    
 class BatimentViewSet(BaseModelViewSet):
     """ViewSet pour gérer les Bâtiments"""
     serializer_class = BatimentSerializer
@@ -132,10 +177,10 @@ class BatimentViewSet(BaseModelViewSet):
         return Batiment.objects.none()
 
     def perform_create(self, serializer):
-        serializer.save()
+        serializer.save(user=self.request.user)
 
     def perform_update(self, serializer):
-        serializer.save()
+        serializer.save(user=self.request.user)
 
     @action(detail=False, methods=['get'], url_path='actifs')
     def actifs(self, request):
@@ -268,9 +313,11 @@ class ReservationViewSet(BaseModelViewSet):
     def perform_create(self, serializer):
         profile = self.get_client_profile()
         if profile and self.get_user_role() in CLIENT_ROLES:
-            serializer.save(client=profile)
+            reservation = serializer.save(client=profile)
         else:
-            serializer.save()
+            reservation = serializer.save()
+        reservation.bureau.statut = Bureau.BureauStatus.OCCUPE
+        reservation.bureau.save()
 
     @action(detail=False, methods=['get'], url_path='mes-reservations')
     def mes_reservations(self, request):
@@ -302,9 +349,14 @@ class ContratViewSet(BaseModelViewSet):
     def perform_create(self, serializer):
         profile = self.get_client_profile()
         if profile and self.get_user_role() in CLIENT_ROLES:
-            serializer.save(client=profile)
+            contrat = serializer.save(client=profile, user=self.request.user)
         else:
-            serializer.save()
+            contrat = serializer.save(user=self.request.user)
+
+        if contrat.reservation and contrat.reservation.bureau:
+            contrat.reservation.bureau.statut = Bureau.BureauStatus.OCCUPE
+            contrat.reservation.bureau.save()
+
 
     @action(detail=False, methods=['get'], url_path='mes-contrats')
     def mes_contrats(self, request):
@@ -335,10 +387,19 @@ class LocationViewSet(BaseModelViewSet):
 
     def perform_create(self, serializer):
         profile = self.get_client_profile()
+        kwargs = {}
         if profile and self.get_user_role() in CLIENT_ROLES:
-            serializer.save(client=profile)
-        else:
-            serializer.save()
+            kwargs['client'] = profile
+
+        contrat = getattr(serializer, 'validated_data', {}).get('contrat')
+        if not contrat and 'contrat' in self.request.data:
+            kwargs['contrat_id'] = self.request.data.get('contrat')
+        elif contrat:
+            kwargs['contrat'] = contrat
+
+        location = serializer.save(**kwargs)
+        location.bureau.statut = Bureau.BureauStatus.OCCUPE
+        location.bureau.save()
 
     @action(detail=False, methods=['get'], url_path='mes-locations')
     def mes_locations(self, request):
@@ -367,10 +428,11 @@ class PaiementViewSet(BaseModelViewSet):
 
         return Paiement.objects.none()
 
+
     def perform_create(self, serializer):
         profile = self.get_client_profile()
         if profile and self.get_user_role() in CLIENT_ROLES:
-            serializer.save(client=profile)
+            serializer.save(client=profile, user=self.request.user)
             return
 
         validated = getattr(serializer, 'validated_data', {})
@@ -384,12 +446,13 @@ class PaiementViewSet(BaseModelViewSet):
                 client = location.client
 
         if client:
-            serializer.save(client=client)
+            serializer.save(client=client, user=self.request.user)
         else:
-            serializer.save()
+            serializer.save(user=self.request.user)
 
     def perform_update(self, serializer):
         serializer.save(user=self.request.user)
+
 
     @action(detail=False, methods=['get'], url_path='mes-paiements')
     def mes_paiements(self, request):
@@ -400,6 +463,4 @@ class PaiementViewSet(BaseModelViewSet):
         serializer = self.get_serializer(paiements, many=True)
         return Response(serializer.data)
     
-
-
 
