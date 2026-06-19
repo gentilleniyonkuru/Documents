@@ -206,7 +206,7 @@ class Contrat(models.Model):
 
         
    id = models.AutoField(primary_key=True)
-   reservation = models.OneToOneField(Reservation, on_delete=models.CASCADE, related_name='contrat')
+   reservation = models.OneToOneField(Reservation, on_delete=models.CASCADE, related_name='contrat',blank=True,null=True)
    client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='contrats')
    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='contrats_crees')
    date_debut = models.DateField(null=True, blank=True)
@@ -246,6 +246,14 @@ class Contrat(models.Model):
             raise ValidationError({'montant': _("Le montant du contrat doit être strictement supérieur à 0.")})
         if self.date_debut and self.date_fin and self.date_fin < self.date_debut:
             raise ValidationError({'date_fin': _("La date de fin doit être postérieure à la date de début.")})
+
+        if self.reservation:
+            res = self.reservation
+            if self.client is None and res.client_id:
+                self.client = res.client
+            if self.date_debut and res.date_debut and res.date_fin:
+                if not (res.date_debut <= self.date_debut <= res.date_fin):
+                    raise ValidationError({'date_debut': _("La date de début du contrat doit être comprise dans l'intervalle de la réservation.")})
 
    def save(self, *args, **kwargs):
         user_performing_action = kwargs.pop('user', None)
@@ -377,10 +385,10 @@ class Paiement(models.Model):
 
     @property
     def reste_a_payer_avant_paiement(self):
-        if not self.contrat:
+        if not self.contrat or not self.contrat.montant:
             return Decimal('0.00')
 
-        paiements_valides = self.contrat.paiements.filter(statut='PAID') 
+        paiements_valides = self.contrat.paiements.filter(statut='PAID')
         if self.pk:
             paiements_valides = paiements_valides.exclude(pk=self.pk)
 

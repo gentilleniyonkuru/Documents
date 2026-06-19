@@ -4,7 +4,6 @@ from django.db import transaction
 from .models import Client, Batiment, Niveau,  TypeBureau, Bureau, Reservation,  Contrat, Location, Paiement
 
 
-
 class UserDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
@@ -23,13 +22,10 @@ class ClientDetailSerializer(serializers.ModelSerializer):
         return str(obj.telephone) if obj.telephone else None
 
 
-# --- SÉRIALISEURS PRINCIPAUX ---
-
 class ClientSerializer(serializers.ModelSerializer):
     user_detail = serializers.SerializerMethodField(read_only=True)
     user_id = serializers.IntegerField(source='user.id', read_only=True)
 
-    # CORRECTION : required=False pour permettre les mises à jour partielles (PATCH)
     username = serializers.CharField(write_only=True, required=False, max_length=150)
     password = serializers.CharField(write_only=True, required=False)
     email = serializers.EmailField(write_only=True, required=False)
@@ -39,8 +35,8 @@ class ClientSerializer(serializers.ModelSerializer):
     class Meta:
         model = Client
         fields = [
-            'user_id', 'user_detail', 'username', 'password', 'email', 
-            'first_name', 'last_name', 'telephone', 'addresse', 
+            'user_id', 'user_detail', 'username', 'password', 'email',
+            'first_name', 'last_name', 'telephone', 'addresse',
             'date_naissance', 'created_at', 'updated_at'
         ]
 
@@ -48,7 +44,6 @@ class ClientSerializer(serializers.ModelSerializer):
         return UserDetailSerializer(obj.user).data
 
     def validate_username(self, value):
-        # CORRECTION : Ne pas s'auto-bloquer lors d'une modification
         query = User.objects.filter(username=value)
         if self.instance and self.instance.user:
             query = query.exclude(pk=self.instance.user.id)
@@ -80,7 +75,6 @@ class ClientSerializer(serializers.ModelSerializer):
             return client
 
     def update(self, instance, validated_data):
-        # AJOUT CRITIQUE : Permet de modifier aussi les infos de l'User lié
         user_data = {}
         for field in ['username', 'email', 'first_name', 'last_name']:
             if field in validated_data:
@@ -89,7 +83,6 @@ class ClientSerializer(serializers.ModelSerializer):
         password = validated_data.pop('password', None)
 
         with transaction.atomic():
-            # 1. Mise à jour de l'User
             if user_data or password:
                 user = instance.user
                 for attr, value in user_data.items():
@@ -98,7 +91,6 @@ class ClientSerializer(serializers.ModelSerializer):
                     user.set_password(password)
                 user.save()
 
-            # 2. Mise à jour du Client
             return super().update(instance, validated_data)
 
 
@@ -106,8 +98,7 @@ class BatimentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Batiment
         fields = ['id', 'nom', 'adresse', 'nombre_etages', 'date_construction', 'created_at', 'updated_at', 'is_active']
-        
-        
+
 
 class NiveauSerializer(serializers.ModelSerializer):
     batiment_detail = serializers.SerializerMethodField(read_only=True)
@@ -186,20 +177,52 @@ class BureauSerializer(serializers.ModelSerializer):
         instance.save(user=user)
         return instance
 
+
 class ContratSerializer(serializers.ModelSerializer):
     montant = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     created_by = UserDetailSerializer(read_only=True)
     created_at = serializers.DateTimeField(read_only=True)
     updated_at = serializers.DateTimeField(read_only=True)
     is_active = serializers.BooleanField(default=True)
-    
+    locations = serializers.SerializerMethodField(read_only=True)
+    paiements = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = Contrat
         fields = [
             'id', 'reservation', 'client', 'date_debut', 'date_fin',
-            'type_facturation', 'montant', 'description', 'created_by', 'created_at', 'updated_at', 'is_active'
+            'type_facturation', 'montant', 'description',
+             'created_by', 'created_at', 'updated_at', 'is_active',
+            'locations', 'paiements'
         ]
-        read_only_fields = ['statut_approbation', 'created_by', 'created_at', 'updated_at', 'is_active']
+        read_only_fields = [ 'created_by', 'created_at', 'updated_at', 'is_active', 'locations', 'paiements']
+
+    def get_locations(self, obj):
+        qs = obj.locations.all()
+        return [
+            {
+                'id': loc.id,
+                'date_debut': loc.date_debut,
+                'date_fin': loc.date_fin,
+                'bureau_id': loc.bureau_id,
+            }
+            for loc in qs
+        ]
+
+    def get_paiements(self, obj):
+        qs = obj.paiements.all()
+        return [
+            {
+                'id': p.id,
+                'date': p.date,
+                'montant': str(p.montant),
+                'mode': p.mode,
+                'statut': p.statut,
+                'location_id': p.location_id,
+                'client_id': p.client_id,
+            }
+            for p in qs
+        ]
 
     def create(self, validated_data):
         user = validated_data.pop('user', None)
@@ -213,7 +236,6 @@ class ContratSerializer(serializers.ModelSerializer):
             setattr(instance, attr, value)
         instance.save(user=user)
         return instance
-        
 
 
 class ReservationSerializer(serializers.ModelSerializer):
@@ -249,11 +271,9 @@ class ReservationSerializer(serializers.ModelSerializer):
         
         request = self.context.get('request')
         if request and request.user and request.user.is_authenticated:
-            # 1. On vérifie s'il y a un profil attaché
             if hasattr(request.user, 'client_profile') and request.user.client_profile:
                 profile = request.user.client_profile
                 
-                # 2. CORRECTION : On bloque en lecture seule UNIQUEMENT si son rôle est strictement 'CLIENT'
                 if profile.role == 'CLIENT':
                     self.fields['client'].read_only = True
 
@@ -340,6 +360,28 @@ class PaiementSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         user = validated_data.pop('user', None)
+        contrat = validated_data.get('contrat')
+        location = validated_data.get('location')
+        client = validated_data.get('client')
+
+        if not client:
+            if contrat:
+                if hasattr(contrat, 'client'):
+                    validated_data['client'] = contrat.client
+                elif isinstance(contrat, int):
+                    try:
+                        validated_data['client'] = Contrat.objects.get(pk=contrat).client
+                    except Contrat.DoesNotExist:
+                        pass
+            elif location:
+                if hasattr(location, 'client'):
+                    validated_data['client'] = location.client
+                elif isinstance(location, int):
+                    try:
+                        validated_data['client'] = Location.objects.get(pk=location).client
+                    except Location.DoesNotExist:
+                        pass
+
         paiement = Paiement(**validated_data)
         paiement.save(user=user)
         return paiement
@@ -350,5 +392,4 @@ class PaiementSerializer(serializers.ModelSerializer):
             setattr(instance, attr, value)
         instance.save(user=user)
         return instance
-        
         

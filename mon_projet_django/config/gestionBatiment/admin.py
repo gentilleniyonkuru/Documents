@@ -92,11 +92,11 @@ class LocationAdmin(admin.ModelAdmin):
 
 @admin.register(Paiement)
 class PaiementAdmin(admin.ModelAdmin):
-    
     list_display = ('id', 'client', 'montant', 'reste_a_payer_visuel', 'statut', 'mode', 'contrat', 'location', 'date')
     search_fields = ('client__user__first_name', 'client__user__last_name', 'contrat__id')
     list_filter = ('statut', 'mode', 'date')
+    readonly_fields = ('montant', 'statut', 'reste_a_payer_visuel')
 
     def reste_a_payer_visuel(self, obj):
-        return f"{obj.reste_a_payer} CFA"
+        return f"{obj.reste_a_payer_avant_paiement} CFA"
     reste_a_payer_visuel.short_description = "Reste à payer"
