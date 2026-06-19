@@ -336,7 +336,7 @@ class PaiementSerializer(serializers.ModelSerializer):
         model = Paiement
         fields = [
             'id', 'date', 'montant', 'mode', 'location', 'client',
-            'client_detail', 'contrat', 'statut',
+            'client_detail', 'contrat', 'statut','mois_paye','annee_paye',
             'created_by', 'created_at', 'updated_at', 'is_active'
         ]
         read_only_fields = ['created_by', 'statut', 'created_at', 'updated_at', 'is_active']
@@ -357,6 +357,29 @@ class PaiementSerializer(serializers.ModelSerializer):
                 'date_naissance': obj.client.date_naissance,
             }
         return None 
+    
+    
+    def validate(self, attrs):
+        client = attrs.get('client')
+        contrat = attrs.get('contrat')
+        location = attrs.get('location')
+
+        if not client and not contrat and not location:
+            raise serializers.ValidationError(
+                "Un paiement doit etre lie a un client, un contrat ou une location."
+            )
+
+        if client and contrat and contrat.client_id != client.id:
+            raise serializers.ValidationError({
+                'client': "Le client ne correspond pas au client du contrat."
+            })
+
+        if client and location and location.client_id != client.id:
+            raise serializers.ValidationError({
+                'client': "Le client ne correspond pas au client de la location."
+            })
+
+        return attrs
 
     def create(self, validated_data):
         user = validated_data.pop('user', None)

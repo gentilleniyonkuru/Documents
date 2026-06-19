@@ -322,11 +322,21 @@ class Paiement(models.Model):
         PENDING = 'PENDING', _('En attente')
         COMPLETED = 'PAID', _('Payé')
         PENDING_ADMIN = 'PENDING_ADMIN', _('En attente administrateur')
-        FAILED = 'FAILED', _('Échoué') 
-        
+        FAILED = 'FAILED', _('Échoué')
+
+    CHOIX_MOIS = [
+        (1, 'Janvier'), (2, 'Février'), (3, 'Mars'), (4, 'Avril'),
+        (5, 'Mai'), (6, 'Juin'), (7, 'Juillet'), (8, 'Août'),
+        (9, 'Septembre'), (10, 'Octobre'), (11, 'Novembre'), (12, 'Décembre')
+    ]
+
     id = models.AutoField(primary_key=True)
     montant = models.DecimalField(max_digits=10, decimal_places=2)
     date = models.DateField(null=True, blank=True)
+    
+    mois_paye = models.IntegerField(choices=CHOIX_MOIS, null=True, blank=False)
+    annee_paye = models.IntegerField(default=2026, null=True, blank=False)
+    
     mode = models.CharField(max_length=20, choices=[('CASH', 'Espèces'), ('CARD', 'Carte bancaire'), ('TRANSFER', 'Virement bancaire')], default='CASH')
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='paiements_crees')
     
@@ -339,10 +349,15 @@ class Paiement(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField(default=True)
     
-    
-    def __str__(self):
-        return f"Paiement de {self.montant}€ [{self.get_statut_display()}] - {self.client.user.first_name} {self.client.user.last_name}"
+    class Meta:
+        # Sécurité : un même contrat ne peut pas recevoir 2 paiements validés pour le même mois de la même année
+        unique_together = ('contrat', 'mois_paye', 'annee_paye')
 
+    def __str__(self):
+        mois_str = self.get_mois_paye_display() if self.mois_paye else "Inconnu"
+        return f"Paiement {mois_str} {self.annee_paye} ({self.montant} CFA) - {self.client.user.first_name}"
+
+    
     # --- SÉCURITÉ DE PAIEMENT BASÉE SUR LES STATUTS TEMPORELS ---
     
     def clean(self):
@@ -382,24 +397,52 @@ class Paiement(models.Model):
                 self.statut = self.PaiementStatus.PENDING_ADMIN
         self.full_clean()  
         super().save(*args, **kwargs)
-
+        
+        
     @property
-    def reste_a_payer_avant_paiement(self):
-        if not self.contrat or not self.contrat.montant:
-            return Decimal('0.00')
+    def loyer_mensuel_prevu_30_jours(self):
+        """ Va chercher le prix du bureau et fait : prix * 30 jours """
+        # On essaie d'abord via la location liée au paiement, sinon via le contrat
+        bureau = None
+        if self.location and hasattr(self.location, 'bureau'):
+            bureau = self.location.bureau
+        elif self.contrat and hasattr(self.contrat, 'bureau'):
+            bureau = self.contrat.bureau
+        elif self.contrat and hasattr(self.contrat, 'location') and self.contrat.location:
+            bureau = self.contrat.location.bureau
 
-        paiements_valides = self.contrat.paiements.filter(statut='PAID')
-        if self.pk:
-            paiements_valides = paiements_valides.exclude(pk=self.pk)
-
-        total_deja_paye = sum(p.montant for p in paiements_valides)
-        reste = self.contrat.montant - Decimal(str(total_deja_paye))
-        return max(reste, Decimal('0.00'))
+        # Si on a trouvé le bureau, on prend son prix * 30
+        if bureau and hasattr(bureau, 'prix') and bureau.prix:
+            return bureau.prix * 30
+            
+        # Si ton champ dans le modèle Bureau s'appelle 'loyer' ou 'prix_journalier', remplace .prix ci-dessus
+        return Decimal('0.00')
 
     @property
     def reste_a_payer(self):
-        reste = self.reste_a_payer_avant_paiement
-        if self.statut == 'PAID':
-            reste -= self.montant
+        """ Calcule le reste de montant qu'on va paie"""
+        loyer_attendu = self.loyer_mensuel_prevu_30_jours
+        if loyer_attendu == Decimal('0.00'):
+            return Decimal('0.00')
 
+        # On fait la somme de ce que le client a versé CE MOIS-CI pour ce contrat
+        autres_paiements = Paiement.objects.filter(
+            contrat=self.contrat,
+            statut='PAID',
+            mois_paye=self.mois_paye,
+            annee_paye=self.annee_paye
+        )
+        
+        if self.pk:
+            autres_paiements = autres_paiements.exclude(pk=self.pk)
+
+        total_deja_paye_ce_mois = sum(p.montant for p in autres_paiements)
+        
+        # On ajoute le montant de ce paiement-ci s'il est validé
+        if self.statut == 'PAID':
+            total_deja_paye_ce_mois += self.montant
+
+        # Le reste = (Prix Bureau * 30) - Ce qui a été payé ce mois-ci
+        reste = loyer_attendu - total_deja_paye_ce_mois
         return max(reste, Decimal('0.00'))
+    

@@ -85,18 +85,23 @@ class ContratAdmin(admin.ModelAdmin):
 @admin.register(Location)
 class LocationAdmin(admin.ModelAdmin):
     # AJOUT : Enregistrement de la table Location manquante
-    list_display = ('id', 'client', 'bureau', 'date_debut', 'date_fin', 'statut_temporel', 'is_active')
+    list_display = ('id', 'client', 'bureau','date_debut', 'date_fin', 'statut_temporel', 'is_active')
     search_fields = ('client__user__first_name', 'client__user__last_name', 'bureau__numero')
     list_filter = ('is_active', 'date_debut', 'date_fin')
 
 
 @admin.register(Paiement)
 class PaiementAdmin(admin.ModelAdmin):
-    list_display = ('id', 'client', 'montant', 'reste_a_payer_visuel', 'statut', 'mode', 'contrat', 'location', 'date')
+    list_display = ('id', 'client', 'montant', 'get_loyer_mensuel_30', 'mois_paye', 'annee_paye', 'reste_a_payer_visuel', 'statut', 'mode', 'contrat', 'location', 'date')
     search_fields = ('client__user__first_name', 'client__user__last_name', 'contrat__id')
     list_filter = ('statut', 'mode', 'date')
     readonly_fields = ('montant', 'statut', 'reste_a_payer_visuel')
 
+
+    @admin.display(description='Loyer Mensuel Prévu (30j)')
+    def get_loyer_mensuel_30(self, obj):
+        return f"{obj.loyer_mensuel_prevu_30_jours} CFA"
+
+    @admin.display(description='Reste à payer')
     def reste_a_payer_visuel(self, obj):
-        return f"{obj.reste_a_payer_avant_paiement} CFA"
-    reste_a_payer_visuel.short_description = "Reste à payer"
+        return f"{obj.reste_a_payer} CFA" 
