@@ -299,7 +299,7 @@ class LocationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Location
         fields = ['id', 'date_debut', 'date_fin', 'bureau','contrat', 'client', 'client_detail', 'created_at', 'updated_at', 'is_active']
-        
+        read_only_fields=['date_debut','date_fin']
     def get_client_detail(self, obj):
         if obj.client:
             return {

@@ -194,7 +194,11 @@ class Reservation(models.Model):
                 raise ValidationError({'date_debut': _("Ce bureau est déjà réservé pour tout ou partie de ces dates.")})
 
     def save(self, *args, **kwargs):
-        self.full_clean()  
+        if self.contrat and not self.date_debut:
+            self.date_debut = self.contrat.date_debut
+        if self.contrat and not self.date_fin:
+            self.date_fin = self.contrat.date_fin
+        self.full_clean()
         super().save(*args, **kwargs)
         
 class Contrat(models.Model):
@@ -299,20 +303,24 @@ class Location(models.Model):
     def statut_temporel(self):
         """ Détermine le statut de la location par rapport à la date réelle d'aujourd'hui """
         aujourdhui = timezone.now().date()
-        if self.date_debut and aujourdhui < self.date_debut:
+        if self.contrat.date_debut and aujourdhui < self.contrat.date_debut:
             return "À VENIR"
-        elif self.date_debut and self.date_fin and self.date_debut <= aujourdhui <= self.date_fin:
+        elif self.contrat.date_debut and self.contrat.date_fin and self.contrat.date_debut <= aujourdhui <= self.contrat.date_fin:
             return "EN COURS"
-        elif self.date_fin and aujourdhui > self.date_fin:
+        elif self.contrat.date_fin and aujourdhui > self.contrat.date_fin:
             return "EXPIRÉ"
         return "INCONNU"
 
     def clean(self):
         super().clean()
-        if self.date_debut and self.date_fin and self.date_fin < self.date_debut:
+        if self.contrat.date_debut and self.contrat.date_fin and self.contrat.date_fin < self.contrat.date_debut:
             raise ValidationError({'date_fin': _("La date de fin doit être postérieure à la date de début.")})
 
     def save(self, *args, **kwargs):
+        if self.contrat and not self.date_debut:
+            self.date_debut = self.contrat.date_debut
+        if self.contrat and not self.date_fin:
+            self.date_fin = self.contrat.date_fin
         self.full_clean()
         super().save(*args, **kwargs)
 
