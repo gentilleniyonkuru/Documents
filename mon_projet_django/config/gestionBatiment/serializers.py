@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from django.contrib.auth.models import User 
+from django.contrib.auth.models import User
 from django.db import transaction
 from .models import Client, Batiment, Niveau,  TypeBureau, Bureau, Reservation,  Contrat, Location, Paiement
 
@@ -13,10 +13,15 @@ class UserDetailSerializer(serializers.ModelSerializer):
 class ClientDetailSerializer(serializers.ModelSerializer):
     user = UserDetailSerializer(read_only=True)
     telephone = serializers.SerializerMethodField()
+    type_piece_identite_display = serializers.CharField(source='get_type_piece_identite_display', read_only=True)
 
     class Meta:
         model = Client
-        fields = ['id', 'user', 'telephone', 'addresse', 'date_naissance']
+        fields = [
+            'id', 'user', 'telephone', 'addresse', 'date_naissance', 'lieu_naissance',
+            'nationalite', 'profession', 'type_piece_identite', 'type_piece_identite_display',
+            'numero_piece_identite', 'photo_profil', 'created_at', 'updated_at'
+        ]
 
     def get_telephone(self, obj):
         return str(obj.telephone) if obj.telephone else None
@@ -37,7 +42,9 @@ class ClientSerializer(serializers.ModelSerializer):
         fields = [
             'user_id', 'user_detail', 'username', 'password', 'email',
             'first_name', 'last_name', 'telephone', 'addresse',
-            'date_naissance', 'created_at', 'updated_at'
+            'date_naissance', 'lieu_naissance', 'nationalite', 'profession',
+            'type_piece_identite', 'numero_piece_identite', 'photo_profil',
+            'created_at', 'updated_at'
         ]
 
     def get_user_detail(self, obj):
@@ -95,9 +102,19 @@ class ClientSerializer(serializers.ModelSerializer):
 
 
 class BatimentSerializer(serializers.ModelSerializer):
+    proprietaire_type_piece_display = serializers.CharField(source='get_proprietaire_type_piece_display', read_only=True)
+    periodicite_display = serializers.CharField(source='get_periodicite_display', read_only=True)
+
     class Meta:
         model = Batiment
-        fields = ['id', 'nom', 'adresse', 'nombre_etages', 'date_construction', 'created_at', 'updated_at', 'is_active']
+        fields = [
+            'id', 'nom', 'adresse', 'nombre_etages', 'date_construction',
+            'created_at', 'updated_at', 'is_active',
+            'proprietaire_nom', 'proprietaire_prenom', 'proprietaire_telephone',
+            'proprietaire_email', 'proprietaire_adresse',
+            'proprietaire_type_piece', 'proprietaire_type_piece_display', 'proprietaire_numero_piece',
+            'periodicite', 'periodicite_display'
+        ]
 
 
 class NiveauSerializer(serializers.ModelSerializer):
@@ -186,16 +203,27 @@ class ContratSerializer(serializers.ModelSerializer):
     is_active = serializers.BooleanField(default=True)
     locations = serializers.SerializerMethodField(read_only=True)
     paiements = serializers.SerializerMethodField(read_only=True)
+    document_contrat_signe = serializers.FileField(required=False, allow_null=True)
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.context.get('request')
+        if request and request.user and request.user.is_authenticated:
+            profile = getattr(request.user, 'client_profile', None)
+            if profile and profile.role == 'CLIENT':
+                self.fields['document_contrat_signe'].read_only = True
+    
+    
 
     class Meta:
         model = Contrat
         fields = [
             'id', 'reservation', 'client', 'date_debut', 'date_fin',
-            'type_facturation', 'montant', 'description',
-             'created_by', 'created_at', 'updated_at', 'is_active',
-            'locations', 'paiements'
+            'date_paiement', 'montant', 'description',
+            'created_by', 'created_at', 'updated_at', 'is_active',
+            'locations', 'paiements', 'document_contrat_signe'
         ]
-        read_only_fields = [ 'created_by', 'created_at', 'updated_at', 'is_active', 'locations', 'paiements']
+        read_only_fields = ['created_by', 'created_at', 'updated_at', 'is_active', 'locations', 'paiements']
 
     def get_locations(self, obj):
         qs = obj.locations.all()
@@ -263,8 +291,15 @@ class ReservationSerializer(serializers.ModelSerializer):
                 'telephone': str(obj.client.telephone) if obj.client.telephone else None,
                 'addresse': obj.client.addresse,
                 'date_naissance': obj.client.date_naissance,
+                'lieu_naissance': obj.client.lieu_naissance,
+                'nationalite': obj.client.nationalite,
+                'profession': obj.client.profession,
+                'type_piece_identite': obj.client.type_piece_identite,
+                'type_piece_identite_display': obj.client.get_type_piece_identite_display(),
+                'numero_piece_identite': obj.client.numero_piece_identite,
+                'photo_profil': obj.client.photo_profil.url if obj.client.photo_profil else None,
             }
-        return None
+        return None 
     #Fonction pour masque le champ client aux Clients connecte mais permettre les admins de voir les champs
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -314,6 +349,13 @@ class LocationSerializer(serializers.ModelSerializer):
                 'telephone': str(obj.client.telephone) if obj.client.telephone else None,
                 'addresse': obj.client.addresse,
                 'date_naissance': obj.client.date_naissance,
+                'lieu_naissance': obj.client.lieu_naissance,
+                'nationalite': obj.client.nationalite,
+                'profession': obj.client.profession,
+                'type_piece_identite': obj.client.type_piece_identite,
+                'type_piece_identite_display': obj.client.get_type_piece_identite_display(),
+                'numero_piece_identite': obj.client.numero_piece_identite,
+                'photo_profil': obj.client.photo_profil.url if obj.client.photo_profil else None,
             }
         return None
 
@@ -355,8 +397,15 @@ class PaiementSerializer(serializers.ModelSerializer):
                 'telephone': str(obj.client.telephone) if obj.client.telephone else None,
                 'addresse': obj.client.addresse,
                 'date_naissance': obj.client.date_naissance,
+                'lieu_naissance': obj.client.lieu_naissance,
+                'nationalite': obj.client.nationalite,
+                'profession': obj.client.profession,
+                'type_piece_identite': obj.client.type_piece_identite,
+                'type_piece_identite_display': obj.client.get_type_piece_identite_display(),
+                'numero_piece_identite': obj.client.numero_piece_identite,
+                'photo_profil': obj.client.photo_profil.url if obj.client.photo_profil else None,
             }
-        return None 
+        return None
     
     
     def validate(self, attrs):

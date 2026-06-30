@@ -3,12 +3,17 @@ from .models import Client, Niveau, TypeBureau, Batiment, Bureau, Paiement, Rese
 
 @admin.register(Client)
 class ClientAdmin(admin.ModelAdmin):
-    # CORRECTION : On utilise les méthodes personnalisées (get_first_name...) au lieu de user__first_name
-    list_display = ('id', 'user__id', 'get_first_name', 'get_last_name', 'telephone', 'addresse', 'date_naissance', 'created_at')
-    search_fields = ('user__first_name', 'user__last_name', 'user__username', 'telephone')
-    list_filter = ('created_at',)
-    
-    # Amélioration de l'affichage des méthodes dans l'admin
+    list_display = (
+        'id', 'user__id', 'get_first_name', 'get_last_name', 'telephone',
+        'type_piece_identite', 'numero_piece_identite', 'nationalite', 'profession',
+        'date_naissance', 'lieu_naissance', 'created_at'
+    )
+    search_fields = (
+        'user__first_name', 'user__last_name', 'user__username',
+        'telephone', 'numero_piece_identite', 'nationalite', 'profession'
+    )
+    list_filter = ('created_at', 'type_piece_identite', 'nationalite')
+
     def get_first_name(self, obj):
         return obj.user.first_name
     get_first_name.short_description = 'Prénom'
@@ -20,11 +25,14 @@ class ClientAdmin(admin.ModelAdmin):
 
 @admin.register(Batiment)
 class BatimentAdmin(admin.ModelAdmin):
-    # AJOUT : 'taux_occupation' et 'revenues_totaux' visibles en direct
-    list_display = ('id', 'nom', 'adresse', 'nombre_etages', 'taux_occupation_visuel', 'revenues_totaux_visuel', 'is_active')
-    search_fields = ('nom', 'adresse')
-    list_filter = ('is_active', 'created_at')
-    
+    list_display = (
+        'id', 'nom', 'adresse', 'nombre_etages',
+        'proprietaire_nom', 'proprietaire_prenom', 'proprietaire_telephone',
+        'periodicite', 'taux_occupation_visuel', 'revenues_totaux_visuel', 'is_active'
+    )
+    search_fields = ('nom', 'adresse', 'proprietaire_nom', 'proprietaire_prenom', 'proprietaire_numero_piece')
+    list_filter = ('is_active', 'created_at', 'periodicite')
+
     def taux_occupation_visuel(self, obj):
         return f"{obj.taux_occupation}%"
     taux_occupation_visuel.short_description = "Taux d'occupation"
@@ -76,10 +84,10 @@ class ReservationAdmin(admin.ModelAdmin):
 
 @admin.register(Contrat)
 class ContratAdmin(admin.ModelAdmin):
-    list_display = ('id', 'client', 'reservation', 'date_debut', 'date_fin', 'montant', 'statut_temporel', 'is_active')
+    list_display = ('id', 'client', 'reservation', 'date_debut', 'date_fin', 'date_paiement', 'montant', 'statut_temporel', 'is_active')
     search_fields = ('client__user__first_name', 'client__user__last_name', 'reservation__bureau__numero')
     list_filter = ('is_active', 'date_debut', 'date_fin')
-    readonly_fields = ('montant',) # Géré automatiquement dans le modèle désormais
+    readonly_fields = ('montant',)
 
 
 @admin.register(Location)
@@ -104,4 +112,4 @@ class PaiementAdmin(admin.ModelAdmin):
 
     @admin.display(description='Reste à payer')
     def reste_a_payer_visuel(self, obj):
-        return f"{obj.reste_a_payer} CFA" 
+        return f"{obj.reste_a_payer} CFA"

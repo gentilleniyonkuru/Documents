@@ -1,9 +1,11 @@
+from decimal import Decimal, ROUND_HALF_UP
 from django.db import models
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.utils.translation import gettext_lazy as _
 from phonenumber_field.modelfields import PhoneNumberField
 from django.core.exceptions import ValidationError
-from django.utils import timezone  # Ajouté pour gérer la date du jour
+from django.utils import timezone
 from decimal import Decimal, ROUND_HALF_UP
 
 class Client(models.Model):
@@ -26,6 +28,21 @@ class Client(models.Model):
     telephone = PhoneNumberField(region='CM', blank=True, null=True)
     addresse = models.CharField(max_length=255, blank=True, null=True)
     date_naissance = models.DateField(blank=True, null=True)
+    lieu_naissance = models.CharField(max_length=100, blank=True, null=True)
+    nationalite = models.CharField(max_length=50, blank=True, null=True)
+    profession = models.CharField(max_length=100, blank=True, null=True)
+
+    TYPE_PIECE_CHOICES = [
+        ('CNI', 'Carte Nationale d\'Identité'),
+        ('PASSPORT', 'Passeport'),
+        ('PERMIS', 'Permis de conduire'),
+        ('ACTE_NAISSANCE', 'Acte de naissance'),
+        ('AUTRE', 'Autre'),
+    ]
+    type_piece_identite = models.CharField(max_length=20, choices=TYPE_PIECE_CHOICES, blank=True, null=True)
+    numero_piece_identite = models.CharField(max_length=50, blank=True, null=True)
+    photo_profil = models.ImageField(upload_to='clients/photos/', blank=True, null=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -36,14 +53,28 @@ class Client(models.Model):
 
 class Batiment(models.Model):
     id = models.AutoField(primary_key=True)
+    user= models.ForeignKey(settings.AUTH_USER_MODEL,on_delete =models.CASCADE)
     nom = models.CharField(max_length=100)
     adresse = models.CharField(max_length=50)
     nombre_etages = models.IntegerField(default=0)
     date_construction = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    proprietaire_nom = models.CharField(max_length=100, blank=True, null=True)
+    proprietaire_prenom = models.CharField(max_length=100, blank=True, null=True)
+    proprietaire_telephone = PhoneNumberField(region='CM', blank=True, null=True)
+    proprietaire_email = models.EmailField(max_length=254, blank=True, null=True)
+    proprietaire_adresse = models.CharField(max_length=255, blank=True, null=True)
+    proprietaire_type_piece = models.CharField(max_length=20, choices=Client.TYPE_PIECE_CHOICES, blank=True, null=True)
+    proprietaire_numero_piece = models.CharField(max_length=50, blank=True, null=True)
     is_active = models.BooleanField(default=True)
 
+    PERIODICITE_CHOICES = [
+        ('MENSUEL', 'Mensuel'),
+        ('TRIMESTRIEL', 'Trimestriel'),
+        ('SEMESTRIEL', 'Semestriel'),
+    ]
+    periodicite = models.CharField(max_length=20, choices=PERIODICITE_CHOICES, default='MENSUEL')
     def __str__(self):
         return self.nom
 
@@ -200,41 +231,27 @@ class Reservation(models.Model):
             self.date_fin = self.contrat.date_fin
         self.full_clean()
         super().save(*args, **kwargs)
-        
+         
 class Contrat(models.Model):
+    id = models.AutoField(primary_key=True)
+    reservation = models.OneToOneField(Reservation, on_delete=models.CASCADE, related_name='contrat',blank=True,null=True)
+    client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='contrats')
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='contrats_crees')
+    date_debut = models.DateField(null=True, blank=True)
+    date_fin = models.DateField(null=True, blank=True)
+    date_paiement = models.DateField(null=True, blank=True)
+    montant = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+    description = models.TextField(blank=True, null=True)
+    document_contrat_signe = models.FileField(upload_to='contrats/documents/', blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    is_active = models.BooleanField(default=True)
     
-   class TypeFacturation(models.TextChoices):
-        MENSUEL = 'MENSUEL', _('Mensuel')
-        TRIMESTRIEL = 'TRIMESTRIEL', _('Trimestriel')
-        SEMESTRIEL = 'SEMESTRIEL', _('Semestriel')
-
-        
-   id = models.AutoField(primary_key=True)
-   reservation = models.OneToOneField(Reservation, on_delete=models.CASCADE, related_name='contrat',blank=True,null=True)
-   client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='contrats')
-   created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='contrats_crees')
-   date_debut = models.DateField(null=True, blank=True)
-   date_fin = models.DateField(null=True, blank=True)
+    def __str__(self):
+        return f"Contrat du {self.date_debut} au {self.date_fin}"
     
-    # MODIFICATION 1 : Ajout du choix de périodicité exigé
-   type_facturation = models.CharField(
-        max_length=20,
-        choices=TypeFacturation.choices,
-        default=TypeFacturation.MENSUEL
-    )
-    
-   montant = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
-   description = models.TextField(blank=True, null=True)
-   created_at = models.DateTimeField(auto_now_add=True)
-   updated_at = models.DateTimeField(auto_now=True)
-   is_active = models.BooleanField(default=True)
-   
-
-   def __str__(self):
-        return f"Contrat {self.type_facturation} du {self.date_debut} au {self.date_fin}"
-    
-   @property
-   def statut_temporel(self):
+    @property
+    def statut_temporel(self):
         aujourdhui = timezone.now().date()
         if self.date_debut and aujourdhui < self.date_debut:
             return "À VENIR"
@@ -244,10 +261,8 @@ class Contrat(models.Model):
             return "EXPIRÉ"
         return "INCONNU"
 
-   def clean(self):
+    def clean(self):
         super().clean()
-        if self.montant is not None and self.montant <= Decimal('0.00'):
-            raise ValidationError({'montant': _("Le montant du contrat doit être strictement supérieur à 0.")})
         if self.date_debut and self.date_fin and self.date_fin < self.date_debut:
             raise ValidationError({'date_fin': _("La date de fin doit être postérieure à la date de début.")})
 
@@ -259,28 +274,33 @@ class Contrat(models.Model):
                 if not (res.date_debut <= self.date_debut <= res.date_fin):
                     raise ValidationError({'date_debut': _("La date de début du contrat doit être comprise dans l'intervalle de la réservation.")})
 
-   def save(self, *args, **kwargs):
+    def save(self, *args, **kwargs):
         user_performing_action = kwargs.pop('user', None)
         if user_performing_action:
             self._history_user = user_performing_action
         if user_performing_action and not self.created_by_id:
             self.created_by = user_performing_action
 
-        # MODIFICATION 2 : Calcul harmonisé basé sur la périodicité du contrat
-        if self.reservation and self.reservation.bureau:
-            prix_bureau = self.reservation.bureau.prix or Decimal('0.00')
-            
-            if self.type_facturation == self.TypeFacturation.MENSUEL:
-                self.montant = prix_bureau * Decimal('30.00')
-            elif self.type_facturation == self.TypeFacturation.TRIMESTRIEL:
-                self.montant = prix_bureau * Decimal('90.00')
-            elif self.type_facturation == self.TypeFacturation.SEMESTRIEL:
-                self.montant = prix_bureau * Decimal('180.00')
-            else:
-                self.montant = prix_bureau * Decimal('30.00')
+        periodicite = 'MENSUEL'
+        batiment = None
+        if self.reservation and self.reservation.bureau and self.reservation.bureau.batiment:
+            batiment = self.reservation.bureau.batiment
+            periodicite = batiment.periodicite
 
-            self.montant = self.montant.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-                
+        prix_bureau = Decimal('0.00')
+        if batiment and self.reservation.bureau:
+            prix_bureau = self.reservation.bureau.prix or Decimal('0.00')
+
+        if periodicite == 'MENSUEL':
+            self.montant = prix_bureau * Decimal('30.00')
+        elif periodicite == 'TRIMESTRIEL':
+            self.montant = prix_bureau * Decimal('90.00')
+        elif periodicite == 'SEMESTRIEL':
+            self.montant = prix_bureau * Decimal('180.00')
+        else:
+            self.montant = prix_bureau * Decimal('30.00')
+
+        self.montant = self.montant.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
         self.full_clean()
         super().save(*args, **kwargs)
 

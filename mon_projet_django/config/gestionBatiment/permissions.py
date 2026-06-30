@@ -314,7 +314,7 @@ class ContratPermission(BaseRolePermission):
             return request.method in ('GET', 'HEAD', 'OPTIONS', 'POST')
         
         if role in CLIENT_ROLES:
-            return request.method in ('GET', 'HEAD', 'OPTIONS', 'POST', 'PATCH', 'PUT')
+            return request.method in ('GET', 'HEAD', 'OPTIONS')
         
         return False
     
@@ -333,7 +333,7 @@ class ContratPermission(BaseRolePermission):
         if role in CLIENT_ROLES:
             user_client = getattr(request.user, 'client_profile', None)
             if user_client and obj.client.id == user_client.id:
-                return request.method in ('GET', 'HEAD', 'OPTIONS', 'PATCH', 'PUT')
+                return request.method in ('GET', 'HEAD', 'OPTIONS')
         
         return False
 

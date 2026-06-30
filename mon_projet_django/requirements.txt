@@ -14,3 +14,4 @@ virtualenv==21.3.3
 djangorestframework-simplejwt==5.5.1
 django-simple-history==3.11.0
 setuptools==82.0.1
+Pillow==11.3.0
