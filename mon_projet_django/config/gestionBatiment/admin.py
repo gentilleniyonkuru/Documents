@@ -28,10 +28,10 @@ class BatimentAdmin(admin.ModelAdmin):
     list_display = (
         'id', 'nom', 'adresse', 'nombre_etages',
         'proprietaire_nom', 'proprietaire_prenom', 'proprietaire_telephone',
-        'periodicite', 'taux_occupation_visuel', 'revenues_totaux_visuel', 'is_active'
+         'taux_occupation_visuel', 'revenues_totaux_visuel', 'is_active'
     )
     search_fields = ('nom', 'adresse', 'proprietaire_nom', 'proprietaire_prenom', 'proprietaire_numero_piece')
-    list_filter = ('is_active', 'created_at', 'periodicite')
+    list_filter = ('is_active', 'created_at')
 
     def taux_occupation_visuel(self, obj):
         return f"{obj.taux_occupation}%"
@@ -84,7 +84,7 @@ class ReservationAdmin(admin.ModelAdmin):
 
 @admin.register(Contrat)
 class ContratAdmin(admin.ModelAdmin):
-    list_display = ('id', 'client', 'reservation', 'date_debut', 'date_fin', 'date_paiement', 'montant', 'statut_temporel', 'is_active')
+    list_display = ('id', 'client', 'reservation', 'date_debut', 'date_fin', 'date_paiement', 'montant', 'statut_temporel','periodicite', 'is_active')
     search_fields = ('client__user__first_name', 'client__user__last_name', 'reservation__bureau__numero')
     list_filter = ('is_active', 'date_debut', 'date_fin')
     readonly_fields = ('montant',)

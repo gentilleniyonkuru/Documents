@@ -69,15 +69,7 @@ class Batiment(models.Model):
     proprietaire_numero_piece = models.CharField(max_length=50, blank=True, null=True)
     is_active = models.BooleanField(default=True)
 
-    PERIODICITE_CHOICES = [
-        ('MENSUEL', 'Mensuel'),
-        ('TRIMESTRIEL', 'Trimestriel'),
-        ('SEMESTRIEL', 'Semestriel'),
-    ]
-    periodicite = models.CharField(max_length=20, choices=PERIODICITE_CHOICES, default='MENSUEL')
-    def __str__(self):
-        return self.nom
-
+    
     @property
     def taux_occupation(self):
         total_bureaux = self.bureaux.count()
@@ -225,10 +217,15 @@ class Reservation(models.Model):
                 raise ValidationError({'date_debut': _("Ce bureau est déjà réservé pour tout ou partie de ces dates.")})
 
     def save(self, *args, **kwargs):
-        if self.contrat and not self.date_debut:
-            self.date_debut = self.contrat.date_debut
-        if self.contrat and not self.date_fin:
-            self.date_fin = self.contrat.date_fin
+        try:
+            contrat = self.contrat
+        except Reservation.contrat.RelatedObjectDoesNotExist:
+            contrat = None
+
+        if contrat and not self.date_debut:
+            self.date_debut = contrat.date_debut
+        if contrat and not self.date_fin:
+            self.date_fin = contrat.date_fin
         self.full_clean()
         super().save(*args, **kwargs)
          
@@ -240,6 +237,28 @@ class Contrat(models.Model):
     date_debut = models.DateField(null=True, blank=True)
     date_fin = models.DateField(null=True, blank=True)
     date_paiement = models.DateField(null=True, blank=True)
+    periodicite = models.CharField(
+        max_length=20,
+        choices=[
+            ('MENSUEL', 'Mensuel'),
+            ('TRIMESTRIEL', 'Trimestriel'),
+            ('SEMESTRIEL', 'Semestriel'),
+        ],
+        default='MENSUEL'
+    )
+    statut_approbation = models.CharField(
+        max_length=20,
+        choices=[
+            ('DRAFT', 'Brouillon'),
+            ('PENDING', 'En attente'),
+            ('ACCEPTED', 'Accepté'),
+            ('REJECTED', 'Refusé'),
+        ],
+        default='DRAFT'
+    )
+    approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='contrats_approved')
+    approved_at = models.DateTimeField(null=True, blank=True)
+    rejection_reason = models.TextField(blank=True, null=True)
     montant = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
     description = models.TextField(blank=True, null=True)
     document_contrat_signe = models.FileField(upload_to='contrats/documents/', blank=True, null=True)
@@ -249,6 +268,7 @@ class Contrat(models.Model):
     
     def __str__(self):
         return f"Contrat du {self.date_debut} au {self.date_fin}"
+    
     
     @property
     def statut_temporel(self):
@@ -281,14 +301,9 @@ class Contrat(models.Model):
         if user_performing_action and not self.created_by_id:
             self.created_by = user_performing_action
 
-        periodicite = 'MENSUEL'
-        batiment = None
-        if self.reservation and self.reservation.bureau and self.reservation.bureau.batiment:
-            batiment = self.reservation.bureau.batiment
-            periodicite = batiment.periodicite
-
+        periodicite = self.periodicite or 'MENSUEL'
         prix_bureau = Decimal('0.00')
-        if batiment and self.reservation.bureau:
+        if self.reservation and self.reservation.bureau:
             prix_bureau = self.reservation.bureau.prix or Decimal('0.00')
 
         if periodicite == 'MENSUEL':
@@ -303,6 +318,11 @@ class Contrat(models.Model):
         self.montant = self.montant.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
         self.full_clean()
         super().save(*args, **kwargs)
+
+
+    @property
+    def can_be_modified(self):
+        return self.statut_approbation in ('DRAFT', 'REJECTED')
 
 class Location(models.Model):
     id = models.AutoField(primary_key=True)

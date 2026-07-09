@@ -1,6 +1,10 @@
 from rest_framework import serializers
+from rest_framework.exceptions import ValidationError as DRFValidationError
 from django.contrib.auth.models import User
 from django.db import transaction
+from django.utils import timezone
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.shortcuts import get_object_or_404  
 from .models import Client, Batiment, Niveau,  TypeBureau, Bureau, Reservation,  Contrat, Location, Paiement
 
 
@@ -103,7 +107,6 @@ class ClientSerializer(serializers.ModelSerializer):
 
 class BatimentSerializer(serializers.ModelSerializer):
     proprietaire_type_piece_display = serializers.CharField(source='get_proprietaire_type_piece_display', read_only=True)
-    periodicite_display = serializers.CharField(source='get_periodicite_display', read_only=True)
 
     class Meta:
         model = Batiment
@@ -112,8 +115,7 @@ class BatimentSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at', 'is_active',
             'proprietaire_nom', 'proprietaire_prenom', 'proprietaire_telephone',
             'proprietaire_email', 'proprietaire_adresse',
-            'proprietaire_type_piece', 'proprietaire_type_piece_display', 'proprietaire_numero_piece',
-            'periodicite', 'periodicite_display'
+            'proprietaire_type_piece', 'proprietaire_type_piece_display', 'proprietaire_numero_piece'
         ]
 
 
@@ -198,12 +200,25 @@ class BureauSerializer(serializers.ModelSerializer):
 class ContratSerializer(serializers.ModelSerializer):
     montant = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     created_by = UserDetailSerializer(read_only=True)
+    approved_by = UserDetailSerializer(read_only=True)
     created_at = serializers.DateTimeField(read_only=True)
+    approved_at = serializers.DateTimeField(read_only=True)
     updated_at = serializers.DateTimeField(read_only=True)
     is_active = serializers.BooleanField(default=True)
     locations = serializers.SerializerMethodField(read_only=True)
     paiements = serializers.SerializerMethodField(read_only=True)
     document_contrat_signe = serializers.FileField(required=False, allow_null=True)
+    periodicite = serializers.ChoiceField(
+        choices=[
+            ('MENSUEL', 'Mensuel'),
+            ('TRIMESTRIEL', 'Trimestriel'),
+            ('SEMESTRIEL', 'Semestriel'),
+        ],
+        default='MENSUEL'
+    )
+    statut_approbation = serializers.CharField(read_only=True)
+    rejection_reason = serializers.CharField(read_only=True, allow_blank=True)
+    can_be_modified = serializers.SerializerMethodField(read_only=True)
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -212,18 +227,21 @@ class ContratSerializer(serializers.ModelSerializer):
             profile = getattr(request.user, 'client_profile', None)
             if profile and profile.role == 'CLIENT':
                 self.fields['document_contrat_signe'].read_only = True
-    
-    
 
     class Meta:
         model = Contrat
         fields = [
             'id', 'reservation', 'client', 'date_debut', 'date_fin',
-            'date_paiement', 'montant', 'description',
+            'date_paiement', 'periodicite', 'montant', 'description',
+            'statut_approbation', 'rejection_reason', 'approved_by', 'approved_at',
             'created_by', 'created_at', 'updated_at', 'is_active',
-            'locations', 'paiements', 'document_contrat_signe'
+            'locations', 'paiements', 'document_contrat_signe', 'can_be_modified'
         ]
-        read_only_fields = ['created_by', 'created_at', 'updated_at', 'is_active', 'locations', 'paiements']
+        read_only_fields = [
+            'created_by', 'created_at', 'updated_at', 'is_active',
+            'locations', 'paiements', 'statut_approbation', 'rejection_reason',
+            'approved_by', 'approved_at', 'can_be_modified'
+        ]
 
     def get_locations(self, obj):
         qs = obj.locations.all()
@@ -260,10 +278,23 @@ class ContratSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         user = validated_data.pop('user', None)
+        if instance.statut_approbation == 'ACCEPTED':
+            raise serializers.ValidationError("Un contrat accepté ne peut pas être modifié.")
+        if instance.statut_approbation == 'PENDING':
+            raise serializers.ValidationError("Un contrat en attente ne peut pas être modifié. Veuillez attendre la validation de l'administrateur.")
+
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
+
+        if instance.statut_approbation == 'REJECTED':
+            instance.statut_approbation = 'DRAFT'
+            instance.rejection_reason = None
+
         instance.save(user=user)
         return instance
+
+    def get_can_be_modified(self, obj):
+        return obj.can_be_modified
 
 
 class ReservationSerializer(serializers.ModelSerializer):
@@ -362,26 +393,33 @@ class LocationSerializer(serializers.ModelSerializer):
 
 class PaiementSerializer(serializers.ModelSerializer):
     client_detail = serializers.SerializerMethodField(read_only=True)
-    created_by = UserDetailSerializer(read_only=True)
-    mode = serializers.ChoiceField(choices=[('CASH', 'Espèces'), ('CARD', 'Carte bancaire'), ('TRANSFER', 'Virement bancaire')], default='CASH')
-    montant = serializers.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        required=False,
-        allow_null=True,
-    )
+    contrat_detail = serializers.SerializerMethodField(read_only=True)
+    location_detail = serializers.SerializerMethodField(read_only=True)
     created_at = serializers.DateTimeField(read_only=True)
     updated_at = serializers.DateTimeField(read_only=True)
     is_active = serializers.BooleanField(default=True)
-    
+
     class Meta:
         model = Paiement
         fields = [
-            'id', 'date', 'montant', 'mode', 'location', 'client',
-            'client_detail', 'contrat', 'statut','mois_paye','annee_paye',
-            'created_by', 'created_at', 'updated_at', 'is_active'
+            'id', 'client', 'client_detail',
+            'contrat', 'contrat_detail',
+            'location', 'location_detail',
+            'montant', 'mode', 'statut',
+            'mois_paye', 'annee_paye', 'date',
+            'created_at', 'updated_at', 'is_active',
         ]
-        read_only_fields = ['created_by', 'statut', 'created_at', 'updated_at', 'is_active']
+        # Ces champs sont calculés/assignés côté vue (perform_create),
+        # pas envoyés par le client -> doivent rester en lecture seule
+        read_only_fields = [
+            'client', 'montant', 'statut',
+            'mois_paye', 'annee_paye',
+            'created_at', 'updated_at',
+        ]
+        extra_kwargs = {
+            'contrat': {'required': False, 'allow_null': True},
+            'location': {'required': False, 'allow_null': True},
+        }
 
     def get_client_detail(self, obj):
         if obj.client:
@@ -394,74 +432,24 @@ class PaiementSerializer(serializers.ModelSerializer):
                     'last_name': obj.client.user.last_name,
                     'email': obj.client.user.email,
                 },
-                'telephone': str(obj.client.telephone) if obj.client.telephone else None,
-                'addresse': obj.client.addresse,
-                'date_naissance': obj.client.date_naissance,
-                'lieu_naissance': obj.client.lieu_naissance,
-                'nationalite': obj.client.nationalite,
-                'profession': obj.client.profession,
-                'type_piece_identite': obj.client.type_piece_identite,
-                'type_piece_identite_display': obj.client.get_type_piece_identite_display(),
-                'numero_piece_identite': obj.client.numero_piece_identite,
-                'photo_profil': obj.client.photo_profil.url if obj.client.photo_profil else None,
             }
         return None
-    
-    
-    def validate(self, attrs):
-        client = attrs.get('client')
-        contrat = attrs.get('contrat')
-        location = attrs.get('location')
 
-        if not client and not contrat and not location:
-            raise serializers.ValidationError(
-                "Un paiement doit etre lie a un client, un contrat ou une location."
-            )
+    def get_contrat_detail(self, obj):
+        if obj.contrat:
+            return {
+                'id': obj.contrat.id,
+                'montant': str(obj.contrat.montant) if obj.contrat.montant else None,
+                'statut_approbation': obj.contrat.statut_approbation,
+            }
+        return None
 
-        if client and contrat and contrat.client_id != client.id:
-            raise serializers.ValidationError({
-                'client': "Le client ne correspond pas au client du contrat."
-            })
-
-        if client and location and location.client_id != client.id:
-            raise serializers.ValidationError({
-                'client': "Le client ne correspond pas au client de la location."
-            })
-
-        return attrs
-
-    def create(self, validated_data):
-        user = validated_data.pop('user', None)
-        contrat = validated_data.get('contrat')
-        location = validated_data.get('location')
-        client = validated_data.get('client')
-
-        if not client:
-            if contrat:
-                if hasattr(contrat, 'client'):
-                    validated_data['client'] = contrat.client
-                elif isinstance(contrat, int):
-                    try:
-                        validated_data['client'] = Contrat.objects.get(pk=contrat).client
-                    except Contrat.DoesNotExist:
-                        pass
-            elif location:
-                if hasattr(location, 'client'):
-                    validated_data['client'] = location.client
-                elif isinstance(location, int):
-                    try:
-                        validated_data['client'] = Location.objects.get(pk=location).client
-                    except Location.DoesNotExist:
-                        pass
-
-        paiement = Paiement(**validated_data)
-        paiement.save(user=user)
-        return paiement
-
-    def update(self, instance, validated_data):
-        user = validated_data.pop('user', None)
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save(user=user)
-        return instance
-        
+    def get_location_detail(self, obj):
+        if obj.location:
+            return {
+                'id': obj.location.id,
+                'date_debut': obj.location.date_debut,
+                'date_fin': obj.location.date_fin,
+                'bureau_id': obj.location.bureau_id,
+            }
+        return None
