@@ -7,46 +7,53 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('gestionBatiment', '0003_bureau_statut_contrat_approved_at_and_more'),
+        ("gestionBatiment", "0003_bureau_statut_contrat_approved_at_and_more"),
     ]
 
     operations = [
         migrations.RemoveField(
-            model_name='contrat',
-            name='approved_at',
+            model_name="contrat",
+            name="approved_at",
         ),
         migrations.RemoveField(
-            model_name='contrat',
-            name='approved_by',
+            model_name="contrat",
+            name="approved_by",
         ),
         migrations.RemoveField(
-            model_name='contrat',
-            name='created_by',
+            model_name="contrat",
+            name="created_by",
         ),
         migrations.RemoveField(
-            model_name='contrat',
-            name='statut_approbation',
+            model_name="contrat",
+            name="statut_approbation",
         ),
         migrations.RemoveField(
-            model_name='paiement',
-            name='approved_at',
+            model_name="paiement",
+            name="approved_at",
         ),
         migrations.RemoveField(
-            model_name='paiement',
-            name='approved_by',
+            model_name="paiement",
+            name="approved_by",
         ),
         migrations.RemoveField(
-            model_name='paiement',
-            name='created_by',
+            model_name="paiement",
+            name="created_by",
         ),
         migrations.RemoveField(
-            model_name='paiement',
-            name='idempotency_key',
+            model_name="paiement",
+            name="idempotency_key",
         ),
         migrations.AddField(
-            model_name='location',
-            name='contrat',
-            field=models.ForeignKey(default='', null=True, blank=True, on_delete=django.db.models.deletion.CASCADE, related_name='locations', to='gestionBatiment.contrat'),
+            model_name="location",
+            name="contrat",
+            field=models.ForeignKey(
+                default="",
+                null=True,
+                blank=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="locations",
+                to="gestionBatiment.contrat",
+            ),
             preserve_default=False,
         ),
     ]

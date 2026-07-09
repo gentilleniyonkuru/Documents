@@ -1,0 +1,52 @@
+# ==============================================================================
+# 1. CONFIGURATION GLOBALE (Niveau Supérieur)
+# ==============================================================================
+default_stages: [pre-commit]
+fail_fast: false
+exclude: '^migrations/|venv/|.venv/|env_uv/' # On ignore les fichiers de migrations et d'environnement virtuel
+
+# ==============================================================================
+# 2. LES DÉPÔTS DISTANTS (GitHub)
+# ==============================================================================
+repos:
+  # Nettoyage de base (Espaces, fins de fichiers)
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+
+  # Tri automatique des imports (isort)
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        args: ["--profile", "black"]
+
+  # Formateur de code Python (Black)
+  - repo: https://github.com/psf/black
+    rev: 24.4.2
+    hooks:
+      - id: black
+        language_version: python3
+
+  # Linter ultra-rapide (Ruff)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.4
+    hooks:
+      - id: ruff
+        args: [ --fix ]
+
+# ==============================================================================
+# 3. HOOK LOCAL ("Location" sur ta machine)
+# ==============================================================================
+  - repo: local
+    hooks:
+      - id: django-tests
+        name: Tests Django(gestionBatiment)
+        entry: python mon_projet_django/config/manage.py test
+        language: system
+        always_run: true
+        pass_filenames: false

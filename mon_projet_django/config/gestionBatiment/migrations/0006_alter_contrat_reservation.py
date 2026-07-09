@@ -7,13 +7,19 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('gestionBatiment', '0005_contrat_created_by_paiement_created_by'),
+        ("gestionBatiment", "0005_contrat_created_by_paiement_created_by"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='contrat',
-            name='reservation',
-            field=models.OneToOneField(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='contrat', to='gestionBatiment.reservation'),
+            model_name="contrat",
+            name="reservation",
+            field=models.OneToOneField(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="contrat",
+                to="gestionBatiment.reservation",
+            ),
         ),
     ]

@@ -7,22 +7,33 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('gestionBatiment', '0013_remove_contrat_reservation_reservation_contrat_and_more'),
+        (
+            "gestionBatiment",
+            "0013_remove_contrat_reservation_reservation_contrat_and_more",
+        ),
     ]
 
     operations = [
         migrations.RemoveField(
-            model_name='reservation',
-            name='contrat',
+            model_name="reservation",
+            name="contrat",
         ),
         migrations.AddField(
-            model_name='contrat',
-            name='reservation',
-            field=models.OneToOneField(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='contrat', to='gestionBatiment.reservation'),
+            model_name="contrat",
+            name="reservation",
+            field=models.OneToOneField(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="contrat",
+                to="gestionBatiment.reservation",
+            ),
         ),
         migrations.AlterField(
-            model_name='contrat',
-            name='document_contrat_signe',
-            field=models.FileField(blank=True, null=True, upload_to='contrats/documents/'),
+            model_name="contrat",
+            name="document_contrat_signe",
+            field=models.FileField(
+                blank=True, null=True, upload_to="contrats/documents/"
+            ),
         ),
     ]

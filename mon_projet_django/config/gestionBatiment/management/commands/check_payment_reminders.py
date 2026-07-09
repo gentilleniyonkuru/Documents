@@ -1,9 +1,10 @@
+from datetime import timedelta
+
+from django.conf import settings
+from django.core.mail import send_mail
 from django.core.management.base import BaseCommand
 from django.utils import timezone
-from django.core.mail import send_mail
-from gestionBatiment.models import Contrat, Paiement
-from datetime import timedelta
-from django.conf import settings
+from gestionBatiment.models import Contrat
 
 
 class Command(BaseCommand):
@@ -16,7 +17,7 @@ class Command(BaseCommand):
         contrats = Contrat.objects.filter(
             date_paiement__isnull=False,
             is_active=True,
-        ).select_related('client', 'client__user')
+        ).select_related("client", "client__user")
 
         total = 0
         for contrat in contrats:
@@ -54,12 +55,14 @@ class Command(BaseCommand):
                     send_mail(
                         subject=sujet,
                         message=message,
-                        from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None),
+                        from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
                         recipient_list=[client.user.email],
                         fail_silently=False,
                     )
                     total += 1
-                    self.stdout.write(f"Rappel envoyé à {client.user.email} pour contrat {contrat.id}")
+                    self.stdout.write(
+                        f"Rappel envoyé à {client.user.email} pour contrat {contrat.id}"
+                    )
                 except Exception as e:
                     self.stderr.write(f"Erreur envoi email contrat {contrat.id} : {e}")
 

@@ -6,8 +6,10 @@ from django.db import migrations, models
 
 
 def set_default_user(apps, schema_editor):
-    Batiment = apps.get_model('gestionBatiment', 'Batiment')
-    User = apps.get_model(settings.AUTH_USER_MODEL.split('.')[0], settings.AUTH_USER_MODEL.split('.')[1])
+    Batiment = apps.get_model("gestionBatiment", "Batiment")
+    User = apps.get_model(
+        settings.AUTH_USER_MODEL.split(".")[0], settings.AUTH_USER_MODEL.split(".")[1]
+    )
     default_user = User.objects.first()
     if default_user:
         Batiment.objects.filter(user__isnull=True).update(user=default_user)
@@ -16,20 +18,26 @@ def set_default_user(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('gestionBatiment', '0008_client_batiment_identity_fields'),
+        ("gestionBatiment", "0008_client_batiment_identity_fields"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='batiment',
-            name='user',
-            field=models.ForeignKey(null=True, on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL),
+            model_name="batiment",
+            name="user",
+            field=models.ForeignKey(
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                to=settings.AUTH_USER_MODEL,
+            ),
         ),
         migrations.RunPython(set_default_user, migrations.RunPython.noop),
         migrations.AlterField(
-            model_name='batiment',
-            name='user',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL),
+            model_name="batiment",
+            name="user",
+            field=models.ForeignKey(
+                on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL
+            ),
         ),
     ]

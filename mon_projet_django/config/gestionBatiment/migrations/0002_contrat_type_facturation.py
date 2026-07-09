@@ -6,13 +6,21 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('gestionBatiment', '0001_initial'),
+        ("gestionBatiment", "0001_initial"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='contrat',
-            name='type_facturation',
-            field=models.CharField(choices=[('MENSUEL', 'Mensuel'), ('TRIMESTRIEL', 'Trimestriel'), ('SEMESTRIEL', 'Semestriel')], default='MENSUEL', max_length=20),
+            model_name="contrat",
+            name="type_facturation",
+            field=models.CharField(
+                choices=[
+                    ("MENSUEL", "Mensuel"),
+                    ("TRIMESTRIEL", "Trimestriel"),
+                    ("SEMESTRIEL", "Semestriel"),
+                ],
+                default="MENSUEL",
+                max_length=20,
+            ),
         ),
     ]

@@ -7,22 +7,33 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('gestionBatiment', '0012_remove_contrat_document_fields'),
+        ("gestionBatiment", "0012_remove_contrat_document_fields"),
     ]
 
     operations = [
         migrations.RemoveField(
-            model_name='contrat',
-            name='reservation',
+            model_name="contrat",
+            name="reservation",
         ),
         migrations.AddField(
-            model_name='reservation',
-            name='contrat',
-            field=models.OneToOneField(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='reservation', to='gestionBatiment.contrat'),
+            model_name="reservation",
+            name="contrat",
+            field=models.OneToOneField(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                related_name="reservation",
+                to="gestionBatiment.contrat",
+            ),
         ),
         migrations.AlterField(
-            model_name='contrat',
-            name='document_contrat_signe',
-            field=models.FileField(blank=True, help_text='Document du contrat signé (PDF, image, etc.)', null=True, upload_to='contrats/documents/'),
+            model_name="contrat",
+            name="document_contrat_signe",
+            field=models.FileField(
+                blank=True,
+                help_text="Document du contrat signé (PDF, image, etc.)",
+                null=True,
+                upload_to="contrats/documents/",
+            ),
         ),
     ]

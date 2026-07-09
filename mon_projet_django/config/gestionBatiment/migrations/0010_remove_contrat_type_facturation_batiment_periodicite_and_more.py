@@ -7,33 +7,68 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('gestionBatiment', '0009_batiment_user'),
+        ("gestionBatiment", "0009_batiment_user"),
     ]
 
     operations = [
         migrations.RemoveField(
-            model_name='contrat',
-            name='type_facturation',
+            model_name="contrat",
+            name="type_facturation",
         ),
         migrations.AddField(
-            model_name='batiment',
-            name='periodicite',
-            field=models.CharField(choices=[('MENSUEL', 'Mensuel'), ('TRIMESTRIEL', 'Trimestriel'), ('SEMESTRIEL', 'Semestriel')], default='MENSUEL', max_length=20),
+            model_name="batiment",
+            name="periodicite",
+            field=models.CharField(
+                choices=[
+                    ("MENSUEL", "Mensuel"),
+                    ("TRIMESTRIEL", "Trimestriel"),
+                    ("SEMESTRIEL", "Semestriel"),
+                ],
+                default="MENSUEL",
+                max_length=20,
+            ),
         ),
         migrations.AddField(
-            model_name='contrat',
-            name='date_paiement',
+            model_name="contrat",
+            name="date_paiement",
             field=models.DateField(blank=True, null=True),
         ),
         migrations.CreateModel(
-            name='DocumentContrat',
+            name="DocumentContrat",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('type_document', models.CharField(choices=[('CONTRAT_SIGNE', 'Contrat signé'), ('PIECE_IDENTITE', "Pièce d'identité"), ('JUSTIFICATIF_DOMICILE', 'Justificatif de domicile'), ('ATTESTATION_CAUTION', 'Attestation de caution'), ('AUTRE', 'Autre')], max_length=30)),
-                ('fichier', models.FileField(upload_to='contrats/documents/')),
-                ('date_ajout', models.DateTimeField(auto_now_add=True)),
-                ('is_active', models.BooleanField(default=True)),
-                ('contrat', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='documents', to='gestionBatiment.contrat')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "type_document",
+                    models.CharField(
+                        choices=[
+                            ("CONTRAT_SIGNE", "Contrat signé"),
+                            ("PIECE_IDENTITE", "Pièce d'identité"),
+                            ("JUSTIFICATIF_DOMICILE", "Justificatif de domicile"),
+                            ("ATTESTATION_CAUTION", "Attestation de caution"),
+                            ("AUTRE", "Autre"),
+                        ],
+                        max_length=30,
+                    ),
+                ),
+                ("fichier", models.FileField(upload_to="contrats/documents/")),
+                ("date_ajout", models.DateTimeField(auto_now_add=True)),
+                ("is_active", models.BooleanField(default=True)),
+                (
+                    "contrat",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="documents",
+                        to="gestionBatiment.contrat",
+                    ),
+                ),
             ],
         ),
     ]

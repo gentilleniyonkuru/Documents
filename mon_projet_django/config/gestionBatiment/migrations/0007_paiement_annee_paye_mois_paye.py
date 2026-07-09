@@ -6,22 +6,38 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('gestionBatiment', '0006_alter_contrat_reservation'),
+        ("gestionBatiment", "0006_alter_contrat_reservation"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='paiement',
-            name='annee_paye',
+            model_name="paiement",
+            name="annee_paye",
             field=models.IntegerField(default=2026, null=True),
         ),
         migrations.AddField(
-            model_name='paiement',
-            name='mois_paye',
-            field=models.IntegerField(choices=[(1, 'Janvier'), (2, 'Février'), (3, 'Mars'), (4, 'Avril'), (5, 'Mai'), (6, 'Juin'), (7, 'Juillet'), (8, 'Août'), (9, 'Septembre'), (10, 'Octobre'), (11, 'Novembre'), (12, 'Décembre')], null=True),
+            model_name="paiement",
+            name="mois_paye",
+            field=models.IntegerField(
+                choices=[
+                    (1, "Janvier"),
+                    (2, "Février"),
+                    (3, "Mars"),
+                    (4, "Avril"),
+                    (5, "Mai"),
+                    (6, "Juin"),
+                    (7, "Juillet"),
+                    (8, "Août"),
+                    (9, "Septembre"),
+                    (10, "Octobre"),
+                    (11, "Novembre"),
+                    (12, "Décembre"),
+                ],
+                null=True,
+            ),
         ),
         migrations.AlterUniqueTogether(
-            name='paiement',
-            unique_together={('contrat', 'mois_paye', 'annee_paye')},
+            name="paiement",
+            unique_together={("contrat", "mois_paye", "annee_paye")},
         ),
     ]
