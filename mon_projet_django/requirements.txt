@@ -22,3 +22,4 @@ cfgv==3.5.0
 identify==2.6.19
 nodeenv==1.10.0
 pyyaml==6.0.3
+gunicorn==20.1.0
