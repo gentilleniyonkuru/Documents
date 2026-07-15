@@ -1,0 +1,25 @@
+# Exported from Render on 2026-07-15T09:30:30Z
+version: "1"
+services:
+- type: web
+  name: Batiment
+  runtime: python
+  repo: https://github.com/gentilleniyonkuru/Documents
+  plan: free
+  envVars:
+  - key: command
+    sync: false
+  - key: executable
+    sync: false
+  - key: version
+    sync: false
+  - key: include-system-site-packages
+    sync: false
+  - key: home
+    sync: false
+  - key: Python_version
+    sync: false
+  region: oregon
+  buildCommand: pip install -r requirements.txt
+  startCommand: gunicorn config.wsgi application
+  autoDeployTrigger: commit
