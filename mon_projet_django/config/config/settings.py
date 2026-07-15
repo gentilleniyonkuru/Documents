@@ -19,7 +19,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = "django-insecure-&-hj2@d+7ei+x5dpu6641j1n8pnp#3rra@9y%gvsg^+(*gd-v4"
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = config("DEBUG", default=False, cast=bool)
 
 ALLOWED_HOSTS = ["gestionBatiment.onrender.com", "localhost", "127.0.0.1"]
 
@@ -37,20 +37,20 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt",
     "django_filters",
-    "phonenumbers",
+    "phonenumber_field",
     "django_celery_beat",
     # Ton application locale
     "gestionBatiment",
 ]
 
 REST_FRAMEWORK = {
-    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.LimitOffsetPagination",
-    "PAGE_SIZE": 100,
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
         "rest_framework.authentication.SessionAuthentication",
-        "rest_framework.authentication.BasicAuthentication",
     ),
+    "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.LimitOffsetPagination",
+    "PAGE_SIZE": 100,
 }
 
 
@@ -86,17 +86,17 @@ WSGI_APPLICATION = "config.wsgi.application"
 
 
 # Database
-# Utilise SQLite par défaut pour le développement local et permet une configuration PostgreSQL via variables d'environnement.
+# https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
 
 DATABASES = {
     "default": {
-        "ENGINE": config("DB_ENGINE", default="django.db.backends.sqlite3"),
-        "NAME": config("DB_NAME", default=str(BASE_DIR / "db.sqlite3")),
-        "USER": config("DB_USER", default=""),
+        "ENGINE": config("DB_ENGINE", default="django.db.backends.postgresql"),
+        "NAME": config("DB_NAME", default="gestionBatiment"),
+        "USER": config("DB_USER", default="magis"),
         "PASSWORD": config("DB_PASSWORD", default=""),
         "HOST": config("DB_HOST", default=""),
-        "PORT": config("DB_PORT", default=""),
+        "PORT": config("DB_PORT", default="5432"),
     }
 }
 
@@ -139,6 +139,15 @@ STATIC_URL = "static/"
 
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
